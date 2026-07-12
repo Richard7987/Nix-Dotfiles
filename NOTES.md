@@ -73,6 +73,34 @@ nueva: Hyprland + [Noctalia](https://docs.noctalia.dev/).
    declararlos a mano — bloque dejado comentado en `hyprland.lua` por
    incertidumbre (la doc de Noctalia no publica el comando IPC exacto).
 
+## Auditoría (2026-07-12)
+
+Repaso completo de todos los archivos para verificar sintaxis, opciones y
+consistencia entre módulos. Se encontró y corrigió un bug real:
+
+- **`home/ale/hyprland.lua`, atajos de workspace (mainMod+1..9):** usaba
+  `hl.dsp.exec_raw("workspace " .. i)`. `exec_raw` es para lanzar programas
+  sin las comillas del shell (equivalente al `execr` de Hyprland clásico),
+  **no** para dispatchers de compositor — con eso Hyprland habría intentado
+  ejecutar un programa llamado literalmente "workspace 1" en vez de cambiar
+  de espacio. Corregido a `hl.dsp.focus({ workspace = tostring(i) })` para
+  cambiar de workspace y `hl.dsp.window.move({ workspace = tostring(i) })`
+  para mover la ventana enfocada — API confirmada contra la referencia de
+  `hl.dsp.*` y el `hyprland.lua` de ejemplo del repo oficial de Hyprland.
+
+Se agregó **`claude-code`** a `environment.systemPackages` en
+`hosts/ale/configuration.nix` (paquete oficial en nixpkgs, confirmado en
+search.nixos.org) para tenerlo disponible sin depender de `nix run` cada vez.
+
+Revisado sin encontrar problemas: merge de `environment.systemPackages`
+repetido en varios módulos (es normal, NixOS concatena listas), orden de
+reglas de `security.doas.extraRules` (doas usa "last match wins", por eso la
+regla general va primero y las `noPass` específicas al final — sí es el
+orden correcto), balance de llaves/paréntesis en `hyprland.lua`, y que
+`services.xserver.videoDrivers = [ "nvidia" ]` no requiere
+`services.xserver.enable = true` para que el módulo de Nvidia se active en un
+sistema Wayland puro (patrón estándar en setups Hyprland+Nvidia).
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/

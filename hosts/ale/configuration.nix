@@ -39,6 +39,7 @@
     vim
     curl
     wget
+    claude-code
   ];
 
   # NUNCA cambies este valor después de la instalación inicial (ver `man configuration.nix`,

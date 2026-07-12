@@ -47,17 +47,21 @@ sudo nixos-rebuild switch --flake .#ale
 ## Después del primer switch
 
 - **YubiKey/GPG**: importa tu clave pública y confía en ella:
+
   ```sh
   gpg --keyserver-options no-self-sigs-only \
     --recv-keys --fetch-key https://codeberg.org/Richard7987/gpg-keys/raw/branch/main/ale_bnes.pub.asc
   gpg --edit-key DBD5F61D8A0A14D7 trust   # marca ultimate
   ```
+
   Con la YubiKey insertada, prueba `gpg --card-status` y `ssh-add -L`. Si algo
   se traba, usa el comando `yubico` (definido en tu zsh).
 - **Tailscale**: primera autenticación manual (una sola vez):
+
   ```sh
   doas tailscale up
   ```
+
   El exit node de Mullvad (`mullvad-exit`) se fija solo después de esto vía
   el servicio `tailscale-exit-node`, y queda persistido para los siguientes
   arranques — a diferencia de FreeBSD, aquí no depende de ningún driver wifi
@@ -65,11 +69,3 @@ sudo nixos-rebuild switch --flake .#ale
 - **Noctalia**: si `mainMod+Space` / `+S` / `+,` no abren el launcher/control
   center/settings, revisa si Noctalia ya trae esos keybinds por su cuenta
   antes de activar el bloque comentado al final de `hyprland.lua`.
-
-## Subir a GitHub
-
-```sh
-git add -A
-git commit -m "Config inicial NixOS: Hyprland + Noctalia, YubiKey, Tailscale, gráficos duales"
-git push -u origin main
-```

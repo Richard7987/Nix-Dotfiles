@@ -105,9 +105,11 @@ hl.bind(mainMod .. "+Up", hl.dsp.focus({ direction = "up" }))
 hl.bind(mainMod .. "+Down", hl.dsp.focus({ direction = "down" }))
 
 -- --- Workspaces 1-9 ---
+-- (exec_raw es para lanzar programas sin comillas de shell, NO para dispatchers
+-- de compositor -- el cambio de workspace va por hl.dsp.focus/window.move)
 for i = 1, 9 do
-  hl.bind(mainMod .. "+" .. i, hl.dsp.exec_raw("workspace " .. i))
-  hl.bind(mainMod .. "+SHIFT+" .. i, hl.dsp.exec_raw("movetoworkspace " .. i))
+  hl.bind(mainMod .. "+" .. i, hl.dsp.focus({ workspace = tostring(i) }))
+  hl.bind(mainMod .. "+SHIFT+" .. i, hl.dsp.window.move({ workspace = tostring(i) }))
 end
 
 -- --- Teclas multimedia ---
