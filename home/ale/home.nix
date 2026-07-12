@@ -1,6 +1,10 @@
 { config, pkgs, inputs, ... }:
 
 {
+  imports = [
+    inputs.noctalia.homeModules.default
+  ];
+
   home.username = "ale";
   home.homeDirectory = "/home/ale";
   # NUNCA cambies esto tras la primera activación (ver la doc de home-manager

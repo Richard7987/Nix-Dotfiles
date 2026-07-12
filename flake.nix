@@ -49,6 +49,7 @@
           {
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
+            home-manager.backupFileExtension = "hm-backup"; # evita que un archivo preexistente tumbe la activación
             home-manager.extraSpecialArgs = { inherit inputs; };
             home-manager.users.ale = import ./home/ale/home.nix;
           }

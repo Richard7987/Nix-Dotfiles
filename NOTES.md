@@ -88,6 +88,59 @@ consistencia entre módulos. Se encontró y corrigió un bug real:
   para mover la ventana enfocada — API confirmada contra la referencia de
   `hl.dsp.*` y el `hyprland.lua` de ejemplo del repo oficial de Hyprland.
 
+## Auditoría exhaustiva #2 (2026-07-12) — contra código fuente real, no docs resumidas
+
+Esta vuelta verifiqué cada módulo externo (Noctalia, noctalia-greeter,
+zen-browser-flake, y los módulos de nixpkgs de hyprland/graphics/nvidia/
+pipewire/doas) leyendo su `.nix` real en GitHub, no la página de docs (que
+pasa por un resumidor y puede parafrasear mal un nombre de opción). Encontré
+un bug grave y descarté un riesgo real que ya no era tal tras verificar:
+
+- **BUG GRAVE, corregido:** nunca importé el módulo de home-manager de
+  Noctalia (`inputs.noctalia.homeModules.default`) en `home/ale/home.nix` —
+  solo el de NixOS. Sin ese import, la opción `programs.noctalia.*` que uso
+  ahí (settings, systemd.enable) **no existe** en el esquema de home-manager
+  y el build habría fallado con "The option `programs.noctalia.enable' does
+  not exist". Confirmado leyendo `noctalia/flake.nix` (expone
+  `homeModules.default` por separado de `nixosModules.default`, cada uno
+  envolviendo un módulo `.nix` distinto) y `nix/home-module.nix` (que
+  requiere `package` sin default propio — se resuelve solo si se usa el
+  `homeModules.default` del flake, que sí trae `lib.mkDefault`). Ya agregado
+  el `imports` que faltaba.
+- **Blindaje agregado:** `home-manager.backupFileExtension = "hm-backup";`
+  en `flake.nix` — sin esto, si algún archivo ya existiera donde
+  home-manager quiere escribir uno declarativo (ej. si reinstalas o si algo
+  crea `~/.config/hypr/hyprland.lua` a mano antes del primer switch), la
+  activación completa falla en vez de hacer backup y seguir.
+- **Parecía bug, no lo es (verificado):** el módulo de `noctalia-greeter`
+  lee `config.services.greetd.settings.default_session.user` sin definirlo
+  él mismo, y yo nunca lo seteo en `modules/desktop.nix`. Pero el módulo de
+  greetd de NixOS sí lo defaultea a `"greeter"` automáticamente
+  (`lib.mkDefault "greeter"`) apenas `services.greetd.enable = true` — y
+  noctalia-greeter activa justo eso (`lib.mkDefault true`). Es un patrón de
+  punto fijo perfectamente normal en el sistema de módulos de NixOS, no un
+  ciclo roto. No hacía falta tocar nada.
+- **Parecía bug, no lo es (verificado):** `services.pipewire` con
+  `alsa.enable`/`pulse.enable` en `true` tiene una aserción que exige
+  `audio.enable = true`. Pero `audio.enable` **defaultea** exactamente a
+  `alsa.enable || jack.enable || pulse.enable`, así que se satisface solo.
+  No hacía falta declarar `audio.enable` a mano.
+- **Riesgo evaluado, descartado:** que `programs.hyprland.enable` (módulo
+  in-tree de nixpkgs, sin flake propio de Hyprland como input) instalara una
+  versión vieja de Hyprland sin soporte Lua. Confirmé contra
+  `pkgs/by-name/hy/hyprland/package.nix` en nixpkgs `nixos-unstable`:
+  versión **0.55.4**, que sí soporta `hyprland.lua`. No hizo falta agregar
+  `hyprwm/Hyprland` como input aparte.
+- Confirmado contra fuente real y sin cambios necesarios: `hardware.graphics.enable32Bit`
+  (nombre correcto tras el rename de `hardware.opengl`), la condición de activación
+  del módulo Nvidia (`elem "nvidia" services.xserver.videoDrivers`, no requiere
+  `xserver.enable`), el formato de bus ID contra su regex real, el binario
+  `zen-${name}` → `zen-beta` (visto en el `package.nix` real del flake), que
+  `programs.hyprland.enable` ya configura `xdg.portal`/el wrapper de
+  capacidades/la sesión del display manager solo, y que `security.doas` no
+  tiene ninguna aserción que choque con dejar `security.sudo.enable = true`
+  a la vez.
+
 Se agregó **`claude-code`** a `environment.systemPackages` en
 `hosts/ale/configuration.nix` (paquete oficial en nixpkgs, confirmado en
 search.nixos.org) para tenerlo disponible sin depender de `nix run` cada vez.
