@@ -10,6 +10,12 @@
   ];
 
   # --- Boot ---
+  # Asume arranque UEFI (normal en cualquier laptop de los últimos ~10 años).
+  # Si tu equipo arranca en modo BIOS/legacy (raro, pero posible), esto va a
+  # fallar al instalar el bootloader -- en ese caso cambia por:
+  #   boot.loader.grub.enable = true;
+  #   boot.loader.grub.device = "/dev/sdX";  # disco completo, no partición
+  # y quita las dos líneas de systemd-boot/efi de abajo.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 

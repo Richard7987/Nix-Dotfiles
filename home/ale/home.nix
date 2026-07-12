@@ -14,9 +14,16 @@
   programs.home-manager.enable = true;
 
   # --- Noctalia: ajustes declarativos vía Nix en vez de TOML a mano ---
+  # systemd.enable = false (default) a propósito: Noctalia ya se lanza desde
+  # el hook hl.on("hyprland.start", ...) en hyprland.lua -- que es el método
+  # que la propia doc de Noctalia documenta para Hyprland. Si además
+  # activáramos el servicio systemd (ligado a wayland.systemd.target =
+  # "graphical-session.target" por defecto), correríamos el riesgo de que
+  # ambos mecanismos lancen Noctalia a la vez -> dos instancias peleando por
+  # la barra/IPC. Usa solo uno; el de hyprland.lua es el que no depende de
+  # que graphical-session.target se active correctamente.
   programs.noctalia = {
     enable = true;
-    systemd.enable = true; # incluye launch_apps_as_systemd_services (recomendado por la doc)
     settings = {
       theme = {
         mode = "dark";

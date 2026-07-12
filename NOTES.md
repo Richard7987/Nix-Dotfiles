@@ -141,6 +141,50 @@ un bug grave y descarté un riesgo real que ya no era tal tras verificar:
   tiene ninguna aserción que choque con dejar `security.sudo.enable = true`
   a la vez.
 
+## Auditoría exhaustiva #3 (2026-07-12) — módulos de sistema (pcscd, gamemode, bluetooth, boot) + riesgo de doble lanzamiento de Noctalia
+
+- **BUG real, corregido:** tenía `programs.noctalia.systemd.enable = true;`
+  en `home/ale/home.nix` **a la vez** que lanzo Noctalia directamente desde
+  `hl.on("hyprland.start", function() hl.exec_cmd("noctalia") end)` en
+  `hyprland.lua` (que es el método que la propia doc de Noctalia documenta
+  para Hyprland). El servicio systemd está ligado a
+  `wayland.systemd.target` (default `"graphical-session.target"`, opción
+  genérica de home-manager en `modules/wayland.nix`, confirmada que existe
+  sin necesidad del módulo `wayland.windowManager.hyprland`). El problema no
+  es que la opción no exista (sí existe), sino que si `graphical-session.target`
+  llega a activarse por cualquier otro mecanismo (pam_systemd, logind, etc.)
+  tendríamos DOS instancias de Noctalia arrancando: la del exec-once del
+  compositor y la del servicio systemd, peleando por la barra/IPC. Solución:
+  desactivé `systemd.enable` (queda en su default `false`) y me quedo solo
+  con el exec-once, que es el mecanismo que no depende de si
+  `graphical-session.target` se activa o no.
+- Verificado contra el módulo real de **pcscd**
+  (`services/hardware/pcscd.nix`): su paquete por defecto es
+  `pcscliteWithPolkit` si `security.polkit.enable` está activo — y sí lo
+  está (`programs.gamemode.enable = true` lo fuerza a `true` directamente,
+  sin `mkDefault`, y el propio módulo de Hyprland también lo pone en `true`).
+  Esto es normal en Linux/NixOS (a diferencia del polkit roto de FreeBSD) y
+  no requiere ninguna acción; lo dejo anotado por si algún día ves un
+  rechazo de acceso al lector y hay que mirar reglas de polkit en vez de
+  copiar el workaround de FreeBSD.
+- Verificado que `services.pcscd.enable = true` ya agrega
+  `services.udev.packages = [ pkgs.ccid ]` por su cuenta — el
+  `yubikey-personalization` que agrego en `modules/yubikey.nix` es
+  complementario (reglas específicas de YubiKey, no genéricas de CCID), no
+  redundante.
+- Verificado `programs.gamemode.enable` (`programs/gamemode.nix`): no
+  requiere agregar al usuario a ningún grupo adicional; solo hace falta
+  `enable = true` como ya tengo.
+- Verificado `hardware.bluetooth.powerOnBoot` — default `true` ya, no hacía
+  falta declararlo (estuve a punto de agregarlo de más).
+- Confirmado `cudaPackages.cudatoolkit` existe como atributo real en
+  `pkgs/top-level/all-packages.nix` de nixpkgs unstable.
+- **Gap de documentación, no de código:** `hosts/ale/configuration.nix`
+  asume arranque UEFI (`systemd-boot` + `boot.loader.efi`). Si el equipo
+  resulta ser BIOS/legacy (poco probable en un laptop moderno, pero
+  posible), esto tumbaría la instalación del bootloader por completo. Dejé
+  un comentario explícito en el archivo con el fallback a GRUB.
+
 Se agregó **`claude-code`** a `environment.systemPackages` en
 `hosts/ale/configuration.nix` (paquete oficial en nixpkgs, confirmado en
 search.nixos.org) para tenerlo disponible sin depender de `nix run` cada vez.
