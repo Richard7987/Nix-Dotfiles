@@ -13,6 +13,9 @@ Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://d
 - **Tailscale** con exit node de Mullvad fijado automáticamente al arrancar
   (`modules/tailscale.nix`).
 - **doas** en vez de sudo, **zen-browser** y **Kleopatra**.
+- **Bluetooth** + fix de AVRCP para controles de reproducción, y **LibrePods**
+  para controlar AirPods (modos de ruido, batería, etc.) — ver sección
+  dedicada más abajo, la instalación del AppImage es manual.
 
 ## Antes del primer `nixos-rebuild switch`
 
@@ -69,3 +72,16 @@ sudo nixos-rebuild switch --flake .#ale
 - **Noctalia**: si `mainMod+Space` / `+S` / `+,` no abren el launcher/control
   center/settings, revisa si Noctalia ya trae esos keybinds por su cuenta
   antes de activar el bloque comentado al final de `hyprland.lua`.
+- **LibrePods (AirPods)**: no hay paquete Nix oficial (el proyecto está
+  reescribiéndose de Qt6/C++ a Rust, y en Linux solo publica AppImages
+  nightly como artifacts de GitHub Actions, sin URL estable para fijar por
+  hash). Descarga manual, una vez y cada vez que quieras actualizar:
+  1. https://github.com/kavishdevar/librepods/actions/workflows/ci-linux-rust.yml
+  2. Entra al run exitoso más reciente → Artifacts → descarga el AppImage
+     (necesitas sesión de GitHub, los artifacts están detrás de login)
+  3. `mkdir -p ~/Applications && mv LibrePods*.AppImage ~/Applications/LibrePods.AppImage && chmod +x ~/Applications/LibrePods.AppImage`
+  4. Corre `librepods` (alias ya configurado, usa `appimage-run` por debajo)
+
+  El fix de AVRCP para que play/pause/skip funcionen desde los AirPods ya
+  está aplicado (`~/.config/wireplumber/wireplumber.conf.d/51-bluez-avrcp.conf`,
+  con reinicio automático de wireplumber en cada `home-manager switch`).

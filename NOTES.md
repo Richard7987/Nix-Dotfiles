@@ -198,6 +198,39 @@ orden correcto), balance de llaves/paréntesis en `hyprland.lua`, y que
 `services.xserver.enable = true` para que el módulo de Nvidia se active en un
 sistema Wayland puro (patrón estándar en setups Hyprland+Nvidia).
 
+## LibrePods (AirPods) (2026-07-12)
+
+Investigué el repo (https://github.com/librepods-org/librepods, el real es
+`kavishdevar/librepods` — el `-org` es un fork/mirror) antes de agregarlo.
+Hallazgos clave:
+
+- **No tiene flake.nix ni paquete Nix oficial.**
+- El proyecto está a mitad de una reescritura: versión vieja en C++/Qt6
+  (buildable con cmake, pero siendo reemplazada) vs. reescritura nueva en
+  Rust (rama `linux/rust`, PR #241 sin mergear).
+- Revisé los GitHub Releases vía la API (`api.github.com/repos/kavishdevar/
+  librepods/releases`) y **todos los assets publicados son APKs de Android**
+  — no hay ni un solo binario/AppImage de Linux en releases, pese a que el
+  README dice "download from GitHub releases". La única forma de conseguir
+  el binario de Linux es como *artifact* nightly de GitHub Actions
+  (`ci-linux-rust.yml`), que están detrás de login y no tienen URL pública
+  fija — por eso no es fijable con un hash reproducible en Nix sin más
+  trabajo (habría que autenticarse a la API de Actions, algo que no puedo
+  automatizar de forma limpia en una derivación).
+- Ante ese trade-off (compilar la versión vieja Qt6 de forma 100%
+  declarativa vs. usar el AppImage nuevo de forma manual), le pregunté al
+  usuario — eligió el AppImage nuevo (versión Rust, más features).
+- Lo que sí quedó automatizado: Bluetooth (ya estaba, `hardware.bluetooth.enable`
+  en `modules/desktop.nix`), el fix de AVRCP para play/pause/skip
+  (`~/.config/wireplumber/wireplumber.conf.d/51-bluez-avrcp.conf`, con
+  reinicio de wireplumber vía `home.activation` en cada switch),
+  `pkgs.appimage-run` y un alias `librepods` que lo invoca.
+- **Pendiente manual del usuario, no automatizable:** descargar el AppImage
+  de Actions y ponerlo en `~/Applications/LibrePods.AppImage` — instrucciones
+  en el README. Cada vez que quiera actualizar, tiene que repetir el paso a
+  mano (no hay manera limpia de automatizar esto sin que el proyecto
+  publique releases de Linux reales).
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/

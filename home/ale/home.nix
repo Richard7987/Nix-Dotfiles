@@ -1,4 +1,4 @@
-{ config, pkgs, inputs, ... }:
+{ config, pkgs, lib, inputs, ... }:
 
 {
   imports = [
@@ -83,7 +83,41 @@
     };
   };
 
+  # --- LibrePods (control de AirPods) ---
+  # LibrePods no tiene paquete Nix oficial (proyecto en medio de una reescritura
+  # C++/Qt6 -> Rust) y en Linux solo publica AppImages nightly como artifacts de
+  # GitHub Actions (requieren sesión de GitHub, sin URL fija que se pueda fijar
+  # con hash reproducible) -- no automatizable de forma 100% declarativa.
+  # Descarga manual (una vez, y cuando quieras actualizar):
+  #   1. https://github.com/kavishdevar/librepods/actions/workflows/ci-linux-rust.yml
+  #   2. Entra al run exitoso más reciente -> Artifacts -> descarga el AppImage
+  #   3. mkdir -p ~/Applications && mv el .AppImage descargado a
+  #      ~/Applications/LibrePods.AppImage && chmod +x ~/Applications/LibrePods.AppImage
+  # Después, corre `librepods` (alias de abajo) para lanzarlo.
+  xdg.configFile."wireplumber/wireplumber.conf.d/51-bluez-avrcp.conf".text = ''
+    # Habilita el reproductor AVRCP "dummy" -- necesario para que los controles
+    # de reproducción (play/pause/skip) de los AirPods funcionen con pipewire/
+    # wireplumber. Documentado en linux/README.md de LibrePods.
+    # NO correr mpris-proxy a la vez -- entra en conflicto con esto.
+    monitor.bluez.properties = {
+      bluez5.dummy-avrcp-player = true
+    }
+  '';
+
+  # Reinicia wireplumber tras escribir el conf de arriba para que tome efecto
+  # sin necesidad de cerrar sesión. `try-restart` no falla si el servicio no
+  # existe/no está corriendo (ej. la primera activación desde una TTY sin
+  # sesión gráfica todavía) -- y el `|| true` blinda contra eso igual.
+  home.activation.restartWireplumberAvrcp = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run systemctl --user try-restart wireplumber.service 2>/dev/null || true
+  '';
+
   home.packages = with pkgs; [
     yubikey-manager
+    appimage-run # para correr el AppImage de LibrePods (ver arriba)
   ];
+
+  home.shellAliases = {
+    librepods = "appimage-run ~/Applications/LibrePods.AppImage";
+  };
 }
