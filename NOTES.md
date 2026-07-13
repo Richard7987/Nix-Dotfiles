@@ -300,12 +300,61 @@ Hallazgos clave:
   había movido a `services.pipewire.wireplumber.extraConfig` en la ronda
   anterior — corregido.
 
+## Auditoría exhaustiva #6 (2026-07-12) — integración de Noctalia con el resto del sistema
+
+Pedido explícito de revisar que todo lo que Noctalia trae preconfigurado
+encaje bien con el resto. Investigué el **código fuente real** de
+`noctalia-dev/noctalia` (no solo la doc): resulta que es una app **nativa en
+C++/meson** (Wayland + OpenGL ES directo, no QML/Quickshell como asumía por
+el nombre "shell"). Esto cambió varias suposiciones:
+
+- **Pantalla de bloqueo:** existe (`src/shell/lockscreen/`), con
+  autenticación PAM propia (`src/auth/pam_authenticator.cpp`). Rastreé el
+  código hasta `lock_screen.cpp`: usa el servicio PAM **`"login"`**
+  hardcodeado (no un servicio custom tipo `noctalia`/`noctalia-lock`).
+  `security.pam.services.login` ya viene por defecto en cualquier NixOS —
+  **no hace falta agregar nada.** (Comentario en el código fuente, para
+  quien le interese: ignoran `PAM_AUTHINFO_UNAVAIL` porque un locker sin
+  privilegios no puede leer `/etc/shadow` para el stack de `account`.)
+- **Idle/auto-lock:** Noctalia trae su propio `idle_manager`
+  (`src/idle/idle_manager.cpp`), no depende de `hypridle` ni de nada externo
+  — no hacía falta agregarlo.
+- **Red/Bluetooth/audio en el control center:** usa D-Bus de NetworkManager,
+  BlueZ y PipeWire/WirePlumber directamente (`pipewire` y `wireplumber`
+  están en `buildInputs` de `nix/package.nix`), todo ya cubierto por
+  `networking.networkmanager.enable`, `hardware.bluetooth.enable` y
+  `services.pipewire` que ya tenía.
+- **Sesión de `noctalia-greeter` → Hyprland:** terminé de rastrear la
+  incertidumbre que había dejado pendiente en rondas anteriores. El
+  matching de `--session` en `greeter_sessions.cpp` es contra el campo
+  `Name=` del `.desktop` (no el nombre de archivo), case-insensitive. El
+  `.desktop` real de Hyprland (`example/hyprland.desktop.in` en
+  `hyprwm/Hyprland`) tiene `Name=Hyprland`. **Confirmado: `--session
+  hyprland` sí matchea.** Ya no es una suposición, quité la advertencia del
+  comentario.
+- Nada de esto requirió cambios de código salvo actualizar el comentario de
+  `greeter-args` en `modules/desktop.nix` — todo lo demás ya estaba
+  correctamente cubierto por la config existente.
+
+### Nota aparte: DNS de Tailscale intermitente en esta sesión (FreeBSD)
+
+Durante esta ronda se cayó la resolución de MagicDNS (100.100.100.100) dos
+veces (confirmé con `tailscale netcheck` que la conectividad UDP/DERP
+estaba sana — el problema era solo el resolver). El fix documentado en
+[[tailscale_setup]] (`tailscale set --accept-dns=false` luego `=true`) no
+lo arregló al toque la segunda vez; se resolvió solo unos segundos después.
+Vale la pena vigilar si se repite seguido — podría ser algo nuevo, no
+necesariamente el mismo mecanismo ya documentado.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
 - https://docs.noctalia.dev/v5/compositor-settings/hyprland/
-- https://github.com/noctalia-dev/noctalia
-- https://github.com/noctalia-dev/noctalia-greeter
+- https://github.com/noctalia-dev/noctalia (código fuente: `src/auth`,
+  `src/idle`, `src/shell/lockscreen`, `nix/package.nix`)
+- https://github.com/noctalia-dev/noctalia-greeter (código fuente:
+  `src/greeter/greeter_sessions.cpp`, `src/main.cpp`)
+- https://github.com/hyprwm/Hyprland (`example/hyprland.desktop.in`)
 - https://github.com/0xc000022070/zen-browser-flake
 - https://wiki.hypr.land/Nix/Hyprland-on-NixOS/
 - https://hypr.land/news/26_lua/ (Lua-ificación de la config de Hyprland)

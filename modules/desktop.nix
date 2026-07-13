@@ -53,7 +53,12 @@
   # el shell. Es el que mejor encaja con Noctalia (en vez de SDDM/tuigreet).
   programs.noctalia-greeter = {
     enable = true;
-    greeter-args = "--session hyprland"; # verifica el nombre exacto con `noctalia-greeter sessions`
+    # "hyprland" matchea case-insensitive contra el campo Name= del .desktop
+    # de sesión (no el nombre de archivo) -- rastreado hasta
+    # greeter_sessions.cpp de noctalia-greeter (discoverSessions +
+    # equalsIgnoreCase) y hasta example/hyprland.desktop.in del propio
+    # Hyprland (Name=Hyprland). Confirmado, no es una suposición.
+    greeter-args = "--session hyprland";
   };
 
   fonts.packages = with pkgs; [
