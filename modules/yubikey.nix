@@ -15,33 +15,45 @@
     gnupg
   ];
 
-  # doas en vez de sudo (preferencia del usuario, igual que en FreeBSD)
-  security.doas = {
+  # sudo (a pedido explícito para esta config de NixOS -- distinto de FreeBSD,
+  # donde se usa doas; ver memoria user_prefs / nixos_migration).
+  # `ale` ya está en el grupo "wheel" (hosts/ale/configuration.nix), lo que le
+  # da acceso root completo con contraseña vía las reglas por defecto del
+  # módulo (security.sudo.wheelNeedsPassword = true por defecto) -- no hace
+  # falta una regla general aparte. Solo agregamos las dos excepciones sin
+  # contraseña que sí tenías en FreeBSD (equivalente doas nopass).
+  security.sudo = {
     enable = true;
-    extraRules = [
-      {
-        # Regla general: pide contraseña una vez y la recuerda un rato (persist)
-        users = [ "ale" ];
-        keepEnv = true;
-        persist = true;
-      }
+    # mkAfter: la doc de la opción indica explícitamente usar mkBefore/mkAfter
+    # para controlar el orden relativo a las reglas por defecto del módulo
+    # ("More specific rules should come after more general ones... You can
+    # use mkBefore and/or mkAfter to ensure this is the case").
+    extraRules = lib.mkAfter [
       {
         # Reiniciar pcscd sin contraseña, para que el comando `yubico`
-        # (definido en home/ale/home.nix) sea instantáneo
+        # (definido en home/ale/home.nix) sea instantáneo. Ruta absoluta:
+        # sudoers matchea por ruta resuelta, no por nombre en $PATH.
         users = [ "ale" ];
-        noPass = true;
-        cmd = "systemctl";
-        args = [ "restart" "pcscd.service" ];
+        commands = [
+          {
+            command = "/run/current-system/sw/bin/systemctl restart pcscd.service";
+            options = [ "NOPASSWD" ];
+          }
+        ];
       }
       {
-        # Igual que en FreeBSD: tailscale sin contraseña ni TTY (para el popup GUI)
+        # Igual que en FreeBSD: tailscale sin contraseña ni TTY (para el popup
+        # GUI). Sin argumentos en el comando = cualquier argumento permitido
+        # (semántica de sudoers, al revés que en doas donde "sin args" = "sin
+        # restricción" se logra con `args = null` y no con una ruta pelada).
         users = [ "ale" ];
-        noPass = true;
-        cmd = "tailscale";
+        commands = [
+          {
+            command = "/run/current-system/sw/bin/tailscale";
+            options = [ "NOPASSWD" ];
+          }
+        ];
       }
     ];
   };
-  # Se deja sudo disponible por compatibilidad con herramientas que lo esperen;
-  # el uso diario es con doas.
-  security.sudo.enable = lib.mkDefault true;
 }

@@ -258,6 +258,48 @@ Hallazgos clave:
   literalmente `"jetbrains-mono"`, con guion), y `pkgs.appimage-run` (existe
   en `pkgs/top-level/all-packages.nix`).
 
+## Auditoría exhaustiva #5 (2026-07-12) — doas leído completo (no solo grep de opciones) + cambio a sudo
+
+- **Riesgo real, corregido:** leyendo el módulo `security/doas.nix` completo
+  (no solo los campos usados, como en rondas anteriores) encontré que el
+  propio módulo agrega automáticamente una regla para el grupo `wheel` vía
+  `lib.mkOrder 600`, y su documentación advierte explícitamente: *"More
+  specific rules should come after more general ones... You can use
+  mkBefore and/or mkAfter to ensure this is the case when configuration
+  options are merged."* Mi `extraRules` era una lista plana (prioridad por
+  defecto 1000), que en este caso concreto SÍ terminaba después de la regla
+  `wheel` (600 < 1000) — funcionaba, pero por una coincidencia numérica, no
+  por diseño. Lo envolví en `lib.mkAfter` para que sea correcto por
+  construcción y no dependa de esa coincidencia si algo cambia.
+- **Riesgo real, corregido:** los `cmd = "systemctl"` / `cmd = "tailscale"`
+  usaban nombres relativos. La doc de la opción dice explícitamente: *"It is
+  best practice to specify absolute paths. If a relative path is specified,
+  only a restricted PATH will be searched"* — en NixOS los binarios no viven
+  en `/usr/bin`/`/bin` (el PATH restringido típico de doas), así que un
+  nombre relativo podía no resolver y silenciosamente pedir contraseña en
+  vez de ser nopass. Cambiado a rutas absolutas
+  (`/run/current-system/sw/bin/...`).
+- **Falsa alarma descartada:** temí que `inputs.zen-browser.packages.
+  ${system}.default` fallara porque el flake de zen-browser arma su propio
+  `pkgs` internamente (`import nixpkgs {}` sin mi `nixpkgs.config.
+  allowUnfree`). Revisé el `package.nix` real: `meta` **no tiene campo
+  `license`** en absoluto, así que no hay ningún gate de unfree que
+  satisfacer — no hacía falta ningún cambio.
+- **A pedido del usuario:** cambiado `doas` → `sudo` en toda la config
+  (`modules/yubikey.nix`, comentarios en `modules/tailscale.nix`,
+  `home/ale/home.nix`, `README.md`). `ale` ya está en el grupo `wheel`, así
+  que el acceso general con contraseña sale gratis de la regla por defecto
+  del módulo de sudo — solo agregué las dos reglas `NOPASSWD` puntuales
+  (pcscd, tailscale) que sí tenía con doas, con `lib.mkAfter` y rutas
+  absolutas por la misma razón de arriba. Sintaxis de
+  `security.sudo.extraRules` verificada contra `security/sudo.nix` (nota: en
+  sudoers, especificar un comando SIN argumentos = argumentos libres —
+  al revés de cómo se lograba en doas con `args = null`).
+- De paso encontré una inconsistencia vieja: el README todavía describía el
+  mecanismo de AVRCP como `xdg.configFile` en home-manager, aunque ya lo
+  había movido a `services.pipewire.wireplumber.extraConfig` en la ronda
+  anterior — corregido.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/

@@ -2,7 +2,7 @@
 #
 # Reemplázalo COMPLETO por el que genera el propio instalador de NixOS:
 #   nixos-generate-config --root /mnt     (durante la instalación)
-#   doas nixos-generate-config            (en un sistema ya instalado, regenera
+#   sudo nixos-generate-config             (en un sistema ya instalado, regenera
 #                                           /etc/nixos/hardware-configuration.nix)
 #
 # Copia ese archivo real aquí tal cual — contiene los UUIDs de tus particiones,

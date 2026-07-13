@@ -12,7 +12,8 @@ Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://d
   recuperación (`modules/yubikey.nix`, `home/ale/home.nix`).
 - **Tailscale** con exit node de Mullvad fijado automáticamente al arrancar
   (`modules/tailscale.nix`).
-- **doas** en vez de sudo, **zen-browser** y **Kleopatra**.
+- **sudo** (con reglas `NOPASSWD` puntuales para `tailscale` y el restart de
+  `pcscd`, ver `modules/yubikey.nix`), **zen-browser** y **Kleopatra**.
 - **Bluetooth** + fix de AVRCP para controles de reproducción, y **LibrePods**
   para controlar AirPods (modos de ruido, batería, etc.) — ver sección
   dedicada más abajo, la instalación del AppImage es manual.
@@ -62,7 +63,7 @@ sudo nixos-rebuild switch --flake .#ale
 - **Tailscale**: primera autenticación manual (una sola vez):
 
   ```sh
-  doas tailscale up
+  sudo tailscale up
   ```
 
   El exit node de Mullvad (`mullvad-exit`) se fija solo después de esto vía
@@ -83,5 +84,6 @@ sudo nixos-rebuild switch --flake .#ale
   4. Corre `librepods` (alias ya configurado, usa `appimage-run` por debajo)
 
   El fix de AVRCP para que play/pause/skip funcionen desde los AirPods ya
-  está aplicado (`~/.config/wireplumber/wireplumber.conf.d/51-bluez-avrcp.conf`,
-  con reinicio automático de wireplumber en cada `home-manager switch`).
+  está aplicado a nivel de sistema
+  (`services.pipewire.wireplumber.extraConfig` en `modules/desktop.nix`), se
+  aplica solo en cada `nixos-rebuild switch`.

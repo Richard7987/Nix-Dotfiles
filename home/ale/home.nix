@@ -63,7 +63,7 @@
       # Reinicia pcscd + gpg-agent si la YubiKey deja de responder
       # (equivalente al comando `yubico` que tenías en FreeBSD)
       yubico() {
-        doas systemctl restart pcscd.service
+        sudo systemctl restart pcscd.service
         gpgconf --kill gpg-agent
         gpgconf --launch gpg-agent
         gpg-connect-agent updatestartuptty /bye >/dev/null 2>&1
