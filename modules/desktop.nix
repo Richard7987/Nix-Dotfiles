@@ -7,6 +7,18 @@
   # configurar eso a mano.
   programs.hyprland.enable = true;
 
+  # pkexec necesita el wrapper setuid de NixOS para funcionar (el binario
+  # crudo del store no tiene setuid). Sin esto:
+  #   - el propio módulo de gamemode (modules/graphics.nix) apunta su
+  #     servicio systemd a "${security.wrapperDir}/pkexec", que no existiría
+  #     -> las operaciones privilegiadas de gamemode (cpugovctl/gpuclockctl)
+  #     fallarían.
+  #   - la función "Sync Now" de noctalia-greeter (sincroniza tema/wallpaper
+  #     del greeter con el shell) también depende de pkexec en PATH y
+  #     funcional -- es un problema documentado ("Sync fails with no
+  #     privilege escalator") cuando pkexec está deshabilitado en NixOS.
+  security.polkit.enablePkexecWrapper = true;
+
   # --- Requisitos de Noctalia (docs.noctalia.dev/v5/getting-started/nixos) ---
   networking.networkmanager.enable = true;
   hardware.bluetooth.enable = true;

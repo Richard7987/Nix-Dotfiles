@@ -402,6 +402,41 @@ necesariamente el mismo mecanismo ya documentado.
   vale la pena saber esto si algún día ves fallar específicamente esa
   derivación.
 
+## Auditoría exhaustiva #9 (2026-07-12) — sintaxis validada con herramientas reales + búsqueda de problemas conocidos
+
+A pedido explícito de "revisa toda la sintaxis" en vez de solo leer:
+
+- **Los 8 archivos `.nix` del repo pasan un checker de balance de
+  llaves/paréntesis/corchetes/strings** escrito para la ocasión (Perl, en
+  `/tmp/.../nix_balance_check.pl` -- consciente de comentarios `#`, `/* */`,
+  strings `"..."` y `''...''` con interpolación `${}`). No reemplaza a
+  `nix flake check` (no hay Nix instalado en esta sesión de FreeBSD), pero
+  es una validación estructural real, no solo lectura visual.
+- **`home/ale/hyprland.lua` pasa `luac54 -p`** (parser real de Lua 5.4, sin
+  ejecutar) sin errores -- sintácticamente válido de verdad. `stylua
+  --check` solo marcó diferencias de tabs-vs-espacios (estilo, no bugs);
+  se dejó como está porque 2 espacios es consistente con el resto del repo.
+- **BUG real, corregido:** buscando problemas conocidos de Hyprland+Nvidia y
+  de noctalia-greeter encontré que `pkexec` necesita el wrapper setuid de
+  NixOS (`security.polkit.enablePkexecWrapper`, default `false`) para
+  funcionar -- el binario crudo del store no tiene setuid. Releyendo el
+  `gamemode.nix` que ya había verificado en la ronda #3, até el cabo que
+  había dejado suelto: el servicio systemd de gamemode apunta su PATH a
+  `"${security.wrapperDir}/pkexec"`, que **no existiría** sin ese flag --
+  las operaciones privilegiadas de gamemode (cpugovctl/gpuclockctl)
+  habrían fallado en silencio. De paso, esto es exactamente el problema
+  documentado de noctalia-greeter ("Sync fails with no privilege
+  escalator... pkexec disabled on NixOS") para su función "Sync Now".
+  Agregado `security.polkit.enablePkexecWrapper = true` en
+  `modules/desktop.nix`.
+- **Verificado, no hacía falta cambiar nada:** el umbral de driver Nvidia
+  ≥555 que documentan varios hilos de 2026 para "explicit sync" (evita
+  flickering en XWayland con Hyprland) -- confirmé contra
+  `nvidia-x11/default.nix` que `production`/`stable` está en **595.84**,
+  muy por encima. Y los problemas de "PRIME offload" que aparecen mucho en
+  búsquedas (terminal inutilizable con `prime-run`, etc.) son específicos
+  del modo *offload* -- no aplican al modo *sync* que se eligió a propósito.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
