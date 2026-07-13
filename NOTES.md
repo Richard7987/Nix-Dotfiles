@@ -722,6 +722,136 @@ rastreada -- aceptable para uso personal, no para redistribuir.
   remote del espejo. Host key de `pcale` verificada con el usuario antes
   de agregarla a `known_hosts` (primera conexión, sin entrada previa).
 
+## Auditoría exhaustiva #13 (2026-07-13) — LibrePods en uso real: audio, theming Qt, shell
+
+Con LibrePods ya compilado y usándose de verdad (AirPods conectados,
+reproduciendo audio, firmando commits), aparecieron varios problemas que
+solo salen a la luz con uso real, no con una instalación limpia.
+
+### Audio Bluetooth cortado -- diagnosticado en vivo, parcialmente resuelto
+
+El usuario reportó audio cortado en los AirPods. Descartado metódicamente,
+en este orden:
+
+1. **No era LibrePods forzando el códec**: aun matando el proceso, seguía
+   cortado -- el códec activo (`api.bluez5.codec`) seguía en `sbc_xq`
+   porque WirePlumber recuerda el último perfil negociado por dispositivo,
+   independiente de si LibrePods corre o no.
+2. **No era contienda con otro dispositivo**: el celular seguía emparejado
+   y conectado a los mismos AirPods a la vez -- se descartó apagando su
+   Bluetooth y probando de nuevo, sin cambio.
+3. **No eran los AirPods ni el entorno**: prueba de control clave, los
+   mismos AirPods sonando perfecto conectados directo al celular.
+4. **No eran xruns de PipeWire ni pérdida de paquetes Bluetooth**: `pw-top`
+   en vivo mientras sonaba cortado mostró `ERR: 0` y CPU en microsegundos;
+   una captura de 15s con `sudo btmon` durante el corte no mostró errores,
+   desconexiones ni retransmisiones a nivel HCI -- 70,065 líneas de tráfico
+   normal.
+5. **Sí era el códec `sbc_xq`**: forzado a mano con `wpctl set-profile` a
+   `a2dp-sink-sbc` (SBC normal), el audio quedó limpio al toque. Confirmado
+   con el usuario en vivo.
+
+**Fix aplicado:** `bluez5.codecs` (propiedad real de PipeWire, confirmada
+contra `pipewire-props(7)`: *"Enabled A2DP codecs (default: all)"*) puesto
+en `modules/desktop.nix` bajo `monitor.bluez.properties`, restringido a
+`["sbc"]` inicialmente -- más robusto que parchear la preferencia
+hardcodeada de LibrePods (`media_controller.rs` prueba `sbc_xq` primero
+siempre), porque ninguna app puede negociar un códec que ni se ofrece.
+
+**Sin resolver del todo:** tras un rato de uso sostenido, el audio con SBC
+normal también empezó a fallar, se recuperó tras una pausa de ~2 minutos,
+y volvió a fallar. Mismo patrón probando con `aac` agregado a la lista
+(`["sbc" "aac"]`, todavía en el repo para comparar). Como esto pasa con
+ambos códecs y ninguna herramienta de diagnóstico (PipeWire, HCI) mostró
+error alguno, la hipótesis actual es **throttling térmico** del adaptador
+Bluetooth/WiFi combo (Intel AC9560, comparte antena) bajo uso sostenido --
+pendiente de confirmar revisando temperatura de la zona de la antena y si
+el ventilador mantiene RPM normal durante la degradación. No es un
+problema de configuración de NixOS hasta donde se pudo diagnosticar esta
+ronda.
+
+### BUG real, corregido: Kleopatra y pinentry-qt no mostraban el theme de Noctalia
+
+`~/.config/kdeglobals` ya tenía los colores correctos de Gruvbox/Noctalia
+(confirmado con un `cat` real, incluyendo secciones `[Colors:Window]` /
+`[Colors:View]` con los RGB esperados) -- el template `kcolorscheme`
+(arreglado en la ronda #12 agregando `python3`) sí estaba funcionando. Pero
+ni Kleopatra ni el diálogo de `pinentry-qt` (PIN de la YubiKey) mostraban
+esos colores, ni reabriendo las apps. Causa real: faltaba el **plugin de
+QPA platform theme** que aplica `kdeglobals` a cualquier app Qt --
+`kdePackages.plasma-integration` (provee `KDEPlasmaPlatformTheme6.so`) +
+`kdePackages.breeze` (el estilo Qt que renderiza esa paleta) +
+`QT_QPA_PLATFORMTHEME = "kde"` (`environment.sessionVariables`). Sin el
+plugin, tener los datos correctos en `kdeglobals` no servía de nada --
+ninguna app Qt sabía de dónde sacar la paleta.
+
+Nota de infraestructura: como `QT_QPA_PLATFORMTHEME` es una variable de
+sesión, `gpg-agent` (corriendo desde el arranque, 17h antes del cambio) no
+la había heredado -- hubo que refrescarla en caliente con
+`systemctl --user set-environment QT_QPA_PLATFORMTHEME=kde` +
+`gpgconf --kill/--launch gpg-agent` para probarlo sin cerrar sesión. La
+variable ya se carga sola en cualquier sesión nueva gracias al fix en Nix.
+
+### Oh My Zsh + Powerlevel10k
+
+A pedido del usuario, se agregó `programs.zsh.oh-my-zsh` (plugins `git` +
+`sudo`). Primer intento: dejar `theme` vacío asumiendo que caería al
+default de oh-my-zsh (`robbyrussell`) -- **incorrecto**, confirmado
+leyendo `oh-my-zsh.sh` real: el script solo carga un theme
+`if [[ -n "$ZSH_THEME" ]]`, sin ningún fallback interno. El "default"
+`robbyrussell` en realidad viene de la plantilla del instalador manual
+(`curl | sh`), que el módulo de home-manager no usa -- resultado real:
+ningún theme cargaba, prompt plano de zsh. Corregido declarando
+`theme = "robbyrussell"` explícito primero, y después reemplazado del todo
+por **Powerlevel10k** (a pedido del usuario, quería los bloques de color
+sólidos + el wizard interactivo de `p10k configure`):
+
+- `pkgs.zsh-powerlevel10k` + `pkgs.gitstatus` (da el binario `gitstatusd`
+  -- sin él en PATH, el plugin de git status de p10k intentaría bajarlo en
+  runtime, lo cual falla sin red en un sandbox de Nix) + `pkgs.meslo-lgs-nf`
+  (fuente que p10k recomienda para sus glifos).
+- Sourcing manual en `initContent` (no vía `oh-my-zsh.theme`, que se dejó
+  vacío) ordenado después de oh-my-zsh para pisar cualquier prompt que
+  hubiera puesto.
+- El wizard `p10k configure` generó `~/.p10k.zsh`, pero **no pudo agregar
+  la línea `source ~/.p10k.zsh` a `~/.zshrc`** (mismo problema de siempre:
+  symlink de solo lectura de home-manager) -- el propio wizard lo detectó
+  y avisó, eligiendo "n" (no intentarlo) en vez de fallar. El archivo
+  generado se copió al repo (`home/ale/p10k.zsh`) y se declaró vía
+  `home.file`, con el `source` agregado a mano en `initContent`. Si se
+  vuelve a correr `p10k configure` en el futuro, hay que repetir esa
+  copia manual -- el wizard nunca va a poder escribir solo.
+
+### BUG real, corregido: cursor con el logo de Hyprland en vez de un theme
+
+Sin ningún `home.pointerCursor` declarado, Hyprland cae a su cursor propio
+por defecto (literalmente el logo de Hyprland) -- no hay theme de cursor
+instalado en el sistema. Corregido con el módulo real de home-manager
+(`modules/config/home-cursor.nix`): `pkgs.bibata-cursors`
+(`Bibata-Modern-Amber`, tonos cálidos que combinan con Gruvbox),
+`hyprcursor.enable = true` (exporta `HYPRCURSOR_THEME`/`HYPRCURSOR_SIZE`,
+única forma real de que Hyprland deje de usar su fallback) y
+`gtk.enable = true` (para que Nautilus/Kleopatra usen el mismo cursor).
+Verificado contra el módulo real que `gtk.enable` de home-manager (el
+top-level, necesario para que el cursor de GTK se aplique) solo gestiona
+`gtk-3.0/settings.ini` y NO `gtk.css` a menos que se declare
+`gtk.gtk3.extraCss` (que no hacemos) -- no hay conflicto con el `gtk.css`
+que Noctalia ya escribe en runtime para el color del theme.
+
+Como `HYPRCURSOR_THEME`/`HYPRCURSOR_SIZE` las lee el propio compositor al
+arrancar (no una app individual), este fix necesita cerrar sesión/reiniciar
+para verse -- no se puede probar en caliente como el de `QT_QPA_PLATFORMTHEME`.
+
+### Nota de infraestructura repetida: archivos nuevos sin `git add`
+
+Pasó de nuevo esta ronda (ya había pasado con `pkgs/librepods.nix`): un
+archivo nuevo (`home/ale/p10k.zsh`) sin `git add` es invisible para Nix al
+evaluar el flake vía `git+file` (`error: Path '...' is not tracked by
+Git`) -- hay que agregarlo al índice de git (no hace falta commitear)
+antes de que `nixos-rebuild build/switch` lo pueda ver. Vale la pena
+recordar este patrón para la próxima vez que se agregue un archivo nuevo,
+en vez de sorprenderse de nuevo con el mismo error.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
@@ -753,3 +883,13 @@ rastreada -- aceptable para uso personal, no para redistribuir.
 - https://forum.hypr.land/t/new-gesture-rework-0-51/824 y
   https://linuxiac.com/hyprland-0-51-released-with-reworked-gestures-new-options/
   (contexto del rework de gestos en Hyprland 0.51)
+- `pipewire-props(7)` real (`pipewire-1.6.7-doc` en el store) — propiedad
+  `bluez5.codecs` confirmada ahí, no de memoria.
+- `kavishdevar/librepods` código fuente (`src/media_controller.rs`,
+  función `get_preferred_a2dp_profile`) — confirma el orden hardcodeado de
+  preferencia de códec (`sbc_xq` primero).
+- Módulos reales de home-manager: `modules/config/home-cursor.nix`
+  (`home.pointerCursor`), `modules/misc/gtk/gtk3.nix` (confirma que
+  `gtk.enable` no toca `gtk.css` salvo `extraCss`), `modules/programs/zsh/
+  plugins/oh-my-zsh.nix`, y `share/oh-my-zsh/oh-my-zsh.sh` real instalado
+  (confirma que no hay fallback a "robbyrussell" sin `ZSH_THEME` seteado).

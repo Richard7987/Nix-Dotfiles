@@ -16,7 +16,15 @@ Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://d
   `pcscd`, ver `modules/yubikey.nix`), **zen-browser** y **Kleopatra**.
 - **Bluetooth** + fix de AVRCP para controles de reproducción, y **LibrePods**
   para controlar AirPods (modos de ruido, batería, etc.) — compilado de
-  fuente (`pkgs/librepods.nix`), sin AppImage ni pasos manuales.
+  fuente (`pkgs/librepods.nix`), sin AppImage ni pasos manuales. Códec A2DP
+  restringido a SBC/AAC (`sbc_xq` causaba audio cortado, ver ronda #13 de
+  `NOTES.md` — investigación de causa raíz todavía en curso).
+- **Theming Qt** (Kleopatra, pinentry-qt) coherente con Noctalia vía
+  `kdePackages.plasma-integration`/`breeze` + `QT_QPA_PLATFORMTHEME=kde`.
+- **Oh My Zsh + Powerlevel10k** (`home/ale/home.nix`, config generada con
+  `p10k configure` en `home/ale/p10k.zsh`).
+- **Cursor** Bibata-Modern-Amber vía `home.pointerCursor` (Hyprland cae a su
+  logo propio sin esto).
 
 ## Antes del primer `nixos-rebuild switch`
 
@@ -114,3 +122,18 @@ sudo nixos-rebuild switch --flake .#ale
   está aplicado a nivel de sistema
   (`services.pipewire.wireplumber.extraConfig` en `modules/desktop.nix`), se
   aplica solo en cada `nixos-rebuild switch`.
+
+  **⚠️ Audio Bluetooth cortado, parcialmente resuelto:** el códec `sbc_xq`
+  (mayor bitrate, PipeWire lo negocia por defecto) causaba audio
+  entrecortado -- restringido a `bluez5.codecs = ["sbc" "aac"]` en
+  `modules/desktop.nix`. Con SBC normal sonó limpio al principio pero se
+  degradó tras un rato de uso sostenido, se recuperó tras una pausa, y
+  volvió a fallar -- mismo patrón probando con AAC. Hipótesis actual:
+  throttling térmico del adaptador Bluetooth/WiFi combo (Intel AC9560), no
+  confirmado todavía. Ver ronda #13 de `NOTES.md` para el diagnóstico
+  completo (se descartó LibrePods, contienda con otro dispositivo, xruns
+  de PipeWire y pérdida de paquetes Bluetooth vía `btmon`).
+- **Cursor** — requiere cerrar sesión/reiniciar la primera vez para que
+  Hyprland tome `HYPRCURSOR_THEME`/`HYPRCURSOR_SIZE` (son variables que el
+  compositor lee al arrancar, no se pueden refrescar en caliente como
+  `QT_QPA_PLATFORMTHEME`).

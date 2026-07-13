@@ -13,6 +13,29 @@
 
   programs.home-manager.enable = true;
 
+  # --- Cursor ---
+  # Sin esto, Hyprland cae a su cursor propio por defecto (el logo de
+  # Hyprland) -- no hay ningún theme de cursor instalado/declarado.
+  # hyprcursor.enable = true exporta HYPRCURSOR_THEME/HYPRCURSOR_SIZE (única
+  # forma de que Hyprland use un theme real en vez de su fallback, confirmado
+  # contra el módulo real home-manager, modules/config/home-cursor.nix).
+  # gtk.enable = true de paso para que Nautilus/Kleopatra/etc. usen el mismo
+  # cursor. "Bibata-Modern-Amber" -- tonos cálidos, combina con Gruvbox.
+  # Necesario para que pointerCursor.gtk.enable de abajo aplique de verdad --
+  # confirmado que solo gestiona gtk-3.0/settings.ini (cursor-theme-name),
+  # NO gtk.css (eso solo pasa si se setea gtk.gtk3.extraCss, que no hacemos)
+  # -- no choca con el gtk.css que Noctalia ya escribe en runtime.
+  gtk.enable = true;
+
+  home.pointerCursor = {
+    enable = true;
+    package = pkgs.bibata-cursors;
+    name = "Bibata-Modern-Amber";
+    size = 24;
+    gtk.enable = true;
+    hyprcursor.enable = true;
+  };
+
   # --- Noctalia: ajustes declarativos vía Nix en vez de TOML a mano ---
   # systemd.enable = false (default) a propósito: Noctalia ya se lanza desde
   # el hook hl.on("hyprland.start", ...) en hyprland.lua -- que es el método
