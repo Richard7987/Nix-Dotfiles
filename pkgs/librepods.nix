@@ -43,6 +43,20 @@ rustPlatform.buildRustPackage rec {
 
   cargoLock.lockFile = "${src}/linux-rust/Cargo.lock";
 
+  # "Unknown Control Command identifier: 0x3e" -- 0x3e es un byte del protocolo
+  # propietario AACP de Apple que esta versión de librepods todavía no mapea
+  # (reversing incompleto upstream, no algo que podamos "arreglar" adivinando
+  # qué significa). Es inofensivo -- solo baja el nivel de log de error! a
+  # debug! para que no se vea como un error real cuando no rompe nada.
+  # sed en vez de substituteInPlace multilínea: los strings ''...'' de Nix
+  # re-indentan el contenido automáticamente, lo que rompe el matching por
+  # espacios exactos (ya me pasó -- "pattern doesn't match anything"). -z
+  # trata el archivo completo como una sola cadena para poder matchear a
+  # través del salto de línea sin depender de la indentación real del archivo.
+  postPatch = ''
+    sed -i -z -E 's/error!\(\s*\n\s*"Unknown Control Command identifier/debug!(\n                        "Unknown Control Command identifier/' src/bluetooth/aacp.rs
+  '';
+
   nativeBuildInputs = [ pkg-config makeWrapper autoPatchelfHook ];
   buildInputs = [ dbus libpulseaudio fontconfig freetype ];
 

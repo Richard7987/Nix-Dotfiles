@@ -25,6 +25,17 @@
   services.power-profiles-daemon.enable = true;
   services.upower.enable = true;
 
+  # LibrePods usa org.bluez.AdvertisementMonitorManager1.RegisterMonitor para
+  # su "LE monitor" (detecta el AirPods por advertisements BLE cuando no está
+  # conectado por Bluetooth clásico) -- esa interfaz D-Bus es experimental en
+  # BlueZ (confirmado en `bluetoothd --help`: "-E, --experimental  Enable
+  # experimental D-Bus interfaces") y no viene activada por default en el
+  # módulo de NixOS. Sin esto: "Method RegisterMonitor ... doesn't exist".
+  systemd.services.bluetooth.serviceConfig.ExecStart = [
+    ""
+    "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -E -f /etc/bluetooth/main.conf"
+  ];
+
   # --- Audio (pipewire) — necesario para que los atajos wpctl del hyprland.lua funcionen ---
   security.rtkit.enable = true;
   services.pulseaudio.enable = false; # renombrado desde hardware.pulseaudio (confirmado con nix eval real)
