@@ -67,9 +67,16 @@ sudo nixos-rebuild switch --flake .#ale
 
   ```sh
   gpg --keyserver-options no-self-sigs-only \
-    --recv-keys --fetch-key https://codeberg.org/Richard7987/gpg-keys/raw/branch/main/ale_bnes.pub.asc
-  gpg --edit-key DBD5F61D8A0A14D7 trust   # marca ultimate
+    --fetch-key https://codeberg.org/Richard7987/gpg-keys/raw/branch/main/ale_bnes.pub.asc
+  # marca ultimate (no interactivo -- "trust" pide nivel 1-5 + confirmación):
+  echo -e "5\ny\n" | gpg --no-tty --command-fd 0 --edit-key DBD5F61D8A0A14D7 trust quit
   ```
+
+  (Antes tenía `--recv-keys --fetch-key <url>` en un mismo comando -- gpg los
+  trata como dos "comandos" distintos e incompatibles entre sí, tira
+  "órdenes incompatibles". Ya corregido y probado: importación + confianza
+  ultimate + firma de commit de prueba con `git commit -S`, todo verificado
+  con `git log --show-signature`.)
 
   Con la YubiKey insertada, prueba `gpg --card-status` y `ssh-add -L`. Si algo
   se traba, usa el comando `yubico` (definido en tu zsh).

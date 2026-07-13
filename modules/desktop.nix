@@ -84,5 +84,18 @@
     inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     kitty          # terminal usada en hyprland.lua (mainMod+Return)
     brightnessctl  # atajos de brillo en hyprland.lua
+    nautilus       # gestor de archivos GTK4 -- hereda el theme de Noctalia solo
+                   # (template built-in "gtk4"), sin necesidad de config aparte
+    yazi           # gestor de archivos TUI -- único con template oficial de
+                   # color de Noctalia (community_ids en home.nix)
+    python3        # requerido por el template "kcolorscheme" de Noctalia
+                   # (assets/templates/kde/apply.py escribe ~/.config/kdeglobals
+                   # para que Kleopatra herede el color) -- sin esto el script
+                   # falla en silencio y Kleopatra se queda con el tema por defecto.
   ];
+
+  # Sin esto, Nautilus no tiene papelera, ni monta MTP/almacenamiento
+  # removible/shares de red -- confirmado que services.gvfs.enable es un
+  # mkEnableOption que defaultea a false (nixos/modules/services/desktops/gvfs.nix).
+  services.gvfs.enable = true;
 }

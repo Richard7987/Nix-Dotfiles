@@ -9,7 +9,7 @@
   home.homeDirectory = "/home/ale";
   # NUNCA cambies esto tras la primera activación (ver la doc de home-manager
   # sobre home.stateVersion). Ponlo igual al system.stateVersion del host.
-  home.stateVersion = "25.05"; # <-- AJUSTAR
+  home.stateVersion = "26.05";
 
   programs.home-manager.enable = true;
 
@@ -22,14 +22,31 @@
   # ambos mecanismos lancen Noctalia a la vez -> dos instancias peleando por
   # la barra/IPC. Usa solo uno; el de hyprland.lua es el que no depende de
   # que graphical-session.target se active correctamente.
+  # Paquete Nix real de wallpapers (github:AngelJumbo/gruvbox-wallpapers,
+  # categoría "default" = las 554 imágenes de todas las categorías, ~1.4GB) --
+  # instalado declarativamente vía home.file en vez de bajarlos a mano.
+  # recursive = true: symlinkea archivo por archivo (no la carpeta entera
+  # como una unidad), tal cual lo documenta el propio README del repo.
+  home.file."Pictures/Wallpapers/gruvbox" = {
+    source = inputs.gruvbox-wallpapers.packages.${pkgs.stdenv.hostPlatform.system}.default;
+    recursive = true;
+  };
+
   programs.noctalia = {
     enable = true;
     settings = {
       theme = {
         mode = "dark";
         source = "builtin";
-        builtin = "Catppuccin";
+        builtin = "Gruvbox";
+        # "yazi" es el único gestor de archivos con template oficial de color
+        # de Noctalia (confirmado con `noctalia theme --list-templates` --
+        # está en community templates, no built-in). builtin_ids (gtk3/gtk4/
+        # hyprland/kitty/btop) ya vienen activos por default, no hace falta
+        # declararlos.
+        templates.community_ids = [ "yazi" ];
       };
+      wallpaper.directory = "${config.home.homeDirectory}/Pictures/Wallpapers/gruvbox";
       # Sin esto NO hay ningún agente de polkit corriendo (Hyprland/gamemode
       # solo activan el daemon de polkit, no un agente gráfico) -- acciones
       # con privilegios de apps GUI (ej. NetworkManager guardando una

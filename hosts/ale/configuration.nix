@@ -40,6 +40,14 @@
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   nixpkgs.config.allowUnfree = true; # necesario para el driver Nvidia y Steam
 
+  # Binary cache oficial de Noctalia -- sin esto, cada rebuild compila
+  # Noctalia desde fuente en vez de bajar el binario prearmado
+  # (docs.noctalia.dev/v5/getting-started/nixos).
+  nix.settings.extra-substituters = [ "https://noctalia.cachix.org" ];
+  nix.settings.extra-trusted-public-keys = [
+    "noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4="
+  ];
+
   environment.systemPackages = with pkgs; [
     git
     vim
@@ -51,5 +59,5 @@
   # NUNCA cambies este valor después de la instalación inicial (ver `man configuration.nix`,
   # sección system.stateVersion). Reemplázalo por el que te haya dado el instalador de NixOS
   # antes de correr el primer `nixos-rebuild switch`.
-  system.stateVersion = "25.05"; # <-- AJUSTAR
+  system.stateVersion = "26.05";
 }

@@ -23,6 +23,13 @@
       url = "github:0xc000022070/zen-browser-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Wallpapers estilo Gruvbox (paquete Nix real, no archivos sueltos —
+    # ver home/ale/home.nix para cómo se instala vía home.file).
+    gruvbox-wallpapers = {
+      url = "github:AngelJumbo/gruvbox-wallpapers";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -32,6 +39,7 @@
     , noctalia
     , noctalia-greeter
     , zen-browser
+    , gruvbox-wallpapers
     , ...
     }@inputs:
     let

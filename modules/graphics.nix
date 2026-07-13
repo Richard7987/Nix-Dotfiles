@@ -38,8 +38,10 @@
 
     prime = {
       sync.enable = true;
-      intelBusId = "PCI:0@0:2:0"; # <-- AJUSTAR
-      nvidiaBusId = "PCI:1@0:0:0"; # <-- AJUSTAR
+      # Confirmado contra hardware real: `lspci -D | grep -E "VGA|3D"` dio
+      # 0000:00:02.0 (Intel) y 0000:01:00.0 (Nvidia).
+      intelBusId = "PCI:0@0:2:0";
+      nvidiaBusId = "PCI:1@0:0:0";
     };
   };
 

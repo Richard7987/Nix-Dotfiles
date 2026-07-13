@@ -10,10 +10,12 @@
 
 local mainMod = "SUPER"
 
--- Monitores: "auto" funciona para empezar. Si tienes más de un monitor o
--- quieres posiciones/resoluciones fijas, agrega una línea hl.monitor() por
--- cada salida (hyprctl monitors te da los nombres, ej. "eDP-1", "DP-1").
-hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+-- Monitores: eDP-1 es un panel 1920x1080 de 15.3" (~144 PPI) -- no es HiDPI,
+-- así que se fija scale=1 en vez de dejar "auto" (que Hyprland resolvía a
+-- 1.5, reduciendo el espacio lógico a 1280x720 y amontonando el dock de
+-- Noctalia / agrandando las ventanas). Si agregas más monitores, una línea
+-- hl.monitor() por cada salida (hyprctl monitors te da los nombres).
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "1" })
 
 hl.config({
   input = {
@@ -53,10 +55,14 @@ hl.config({
   animations = {
     enabled = true,
   },
+})
 
-  gestures = {
-    workspace_swipe = true,
-  },
+-- Hyprland >= 0.51 reemplazó el viejo `gestures:workspace_swipe` (booleano)
+-- por este sistema de gestos configurables por dedos/dirección/acción.
+hl.gesture({
+  fingers = 3,
+  direction = "horizontal",
+  action = "workspace",
 })
 
 -- Lanza Noctalia (barra, panel, control center, OSD...) al arrancar Hyprland
@@ -73,10 +79,20 @@ end
 -- Blur y sin animaciones para las superficies de Noctalia (barra, notificaciones,
 -- dock, panel, OSD) — regla tal cual la documenta Noctalia
 hl.layer_rule({
+  name = "noctalia",
   match = { namespace = "^noctalia-(bar-.+|notification|dock|panel|attached-panel|osd)$" },
+  no_anim = true,
   blur = true,
   blur_popups = true,
   ignore_alpha = 0.5,
+})
+
+-- Ventana de ajustes de Noctalia: flotante y con tamaño fijo (tal cual la
+-- documenta Noctalia) en vez de tiling como cualquier otra ventana.
+hl.window_rule({
+  match = { class = "dev.noctalia.Noctalia" },
+  float = true,
+  size = { 1080, 920 },
 })
 
 -- --- Apps / básicos ---
@@ -87,16 +103,13 @@ hl.bind(mainMod .. "+F", hl.dsp.window.fullscreen())
 hl.bind(mainMod .. "+V", hl.dsp.window.float({ action = "toggle" }))
 
 -- --- Atajos de Noctalia (launcher / control center / settings) ---
--- La doc de Noctalia lista estos atajos (mainMod+Space, mainMod+S, mainMod+,)
--- como parte de su integración con Hyprland, pero no publica el comando IPC
--- exacto detrás de cada uno. Es muy probable que Noctalia los registre solo
--- al arrancar (junto con hl.exec_cmd("noctalia") de arriba) y no necesites
--- definir nada aquí. Deja estas líneas comentadas y solo actívalas /
--- corrígelas si al probar ves que Noctalia NO trae sus propios keybinds:
---
--- hl.bind(mainMod .. "+Space", hl.dsp.exec_cmd("noctalia-shell ipc call launcher toggle"))
--- hl.bind(mainMod .. "+S", hl.dsp.exec_cmd("noctalia-shell ipc call control_center toggle"))
--- hl.bind(mainMod .. ",", hl.dsp.exec_cmd("noctalia-shell ipc call settings toggle"))
+-- Comando IPC real confirmado contra docs.noctalia.dev/v5/compositor-settings/hyprland
+-- (la incertidumbre de rondas de auditoría anteriores -- "noctalia-shell ipc
+-- call ... toggle" -- era un nombre inventado; el real es "noctalia msg ...").
+local noctaliaMsg = "noctalia msg "
+hl.bind(mainMod .. "+Space", hl.dsp.exec_cmd(noctaliaMsg .. "panel-toggle launcher"))
+hl.bind(mainMod .. "+S", hl.dsp.exec_cmd(noctaliaMsg .. "panel-toggle control-center"))
+hl.bind(mainMod .. "+comma", hl.dsp.exec_cmd(noctaliaMsg .. "settings-toggle"))
 
 -- --- Navegación de foco ---
 hl.bind(mainMod .. "+Left", hl.dsp.focus({ direction = "left" }))
@@ -113,8 +126,22 @@ for i = 1, 9 do
 end
 
 -- --- Teclas multimedia ---
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"))
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"))
-hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"))
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl set +5%"))
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%-"))
+-- Vía IPC de Noctalia (no wpctl/brightnessctl directo) para que el OSD de
+-- volumen/brillo del shell se muestre en pantalla -- tal cual lo documenta
+-- Noctalia para Hyprland.
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd(noctaliaMsg .. "volume-up"))
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd(noctaliaMsg .. "volume-down"))
+hl.bind("XF86AudioMute", hl.dsp.exec_cmd(noctaliaMsg .. "volume-mute"))
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(noctaliaMsg .. "brightness-up"))
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(noctaliaMsg .. "brightness-down"))
+
+-- Colores de borde de ventana generados por Noctalia (~/.config/hypr/noctalia.lua,
+-- regenerado en cada cambio de theme por el template built-in "hyprland").
+-- Normalmente el propio Noctalia agrega este require automáticamente (vía su
+-- assets/templates/hyprland/apply.sh), pero como hyprland.lua acá es un
+-- symlink de solo lectura al store de Nix (gestionado por home-manager),
+-- Noctalia no puede escribirlo -- por eso se declara a mano, una sola vez.
+-- pcall: en una instalación nueva, este archivo no existe todavía en el
+-- primer arranque (antes de que Noctalia corra y lo genere) -- sin esto,
+-- Hyprland fallaría al parsear el resto del archivo ese primer boot.
+pcall(function() require("noctalia").apply_theme() end)
