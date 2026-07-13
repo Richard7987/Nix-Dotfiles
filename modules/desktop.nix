@@ -58,9 +58,21 @@
   # verificado contra el ejemplo de bluez del propio módulo en nixpkgs
   # (nixos/modules/services/desktops/pipewire/wireplumber.nix).
   # NO correr mpris-proxy a la vez -- entra en conflicto con esto.
+  # bluez5.codecs restringido a "sbc" -- diagnosticado en vivo en esta máquina:
+  # el códec por defecto que negociaba (sbc_xq, mayor bitrate) producía audio
+  # cortado/entrecortado en los AirPods con el adaptador Bluetooth de esta
+  # laptop (Intel AC9560). Confirmado con una prueba de control (mismos
+  # AirPods sonando perfecto en el celular) que no era ni el hardware de los
+  # AirPods ni el entorno, y con `wpctl set-profile` forzando "a2dp-sink-sbc"
+  # que el audio queda limpio. Propiedad real confirmada contra la doc de
+  # PipeWire (pipewire-props(7): "bluez5.codecs # JSON array of string --
+  # Enabled A2DP codecs (default: all)"). Restringir acá (nivel de sistema)
+  # es más robusto que parchear LibrePods -- ninguna app va a poder pedir
+  # sbc_xq/aac si ni siquiera se ofrecen en la negociación.
   services.pipewire.wireplumber.extraConfig."51-bluez-avrcp" = {
     "monitor.bluez.properties" = {
       "bluez5.dummy-avrcp-player" = true;
+      "bluez5.codecs" = [ "sbc" ];
     };
   };
 
