@@ -1,4 +1,4 @@
-{ config, pkgs, lib, inputs, ... }:
+{ config, pkgs, inputs, ... }:
 
 {
   imports = [
@@ -94,23 +94,9 @@
   #   3. mkdir -p ~/Applications && mv el .AppImage descargado a
   #      ~/Applications/LibrePods.AppImage && chmod +x ~/Applications/LibrePods.AppImage
   # Después, corre `librepods` (alias de abajo) para lanzarlo.
-  xdg.configFile."wireplumber/wireplumber.conf.d/51-bluez-avrcp.conf".text = ''
-    # Habilita el reproductor AVRCP "dummy" -- necesario para que los controles
-    # de reproducción (play/pause/skip) de los AirPods funcionen con pipewire/
-    # wireplumber. Documentado en linux/README.md de LibrePods.
-    # NO correr mpris-proxy a la vez -- entra en conflicto con esto.
-    monitor.bluez.properties = {
-      bluez5.dummy-avrcp-player = true
-    }
-  '';
-
-  # Reinicia wireplumber tras escribir el conf de arriba para que tome efecto
-  # sin necesidad de cerrar sesión. `try-restart` no falla si el servicio no
-  # existe/no está corriendo (ej. la primera activación desde una TTY sin
-  # sesión gráfica todavía) -- y el `|| true` blinda contra eso igual.
-  home.activation.restartWireplumberAvrcp = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    run systemctl --user try-restart wireplumber.service 2>/dev/null || true
-  '';
+  # (El fix de AVRCP para play/pause/skip va en modules/desktop.nix, vía
+  # services.pipewire.wireplumber.extraConfig -- no aquí. Ver el comentario
+  # ahí para el porqué.)
 
   home.packages = with pkgs; [
     yubikey-manager

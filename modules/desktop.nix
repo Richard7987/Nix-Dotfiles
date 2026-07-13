@@ -24,6 +24,23 @@
     wireplumber.enable = true;
   };
 
+  # AVRCP "dummy player" -- necesario para que los controles de reproducción
+  # (play/pause/skip) de los AirPods (vía LibrePods, ver home/ale/home.nix)
+  # funcionen con pipewire/wireplumber. Documentado en linux/README.md de
+  # LibrePods como un archivo en ~/.config/wireplumber/wireplumber.conf.d/,
+  # pero el módulo de NixOS para wireplumber gestiona su config vía
+  # XDG_DATA_DIRS desde el store de Nix (services.pipewire.wireplumber.
+  # extraConfig/configPackages), no vía el config-dir tradicional en $HOME --
+  # por eso va aquí y no como xdg.configFile en home-manager. Formato
+  # verificado contra el ejemplo de bluez del propio módulo en nixpkgs
+  # (nixos/modules/services/desktops/pipewire/wireplumber.nix).
+  # NO correr mpris-proxy a la vez -- entra en conflicto con esto.
+  services.pipewire.wireplumber.extraConfig."51-bluez-avrcp" = {
+    "monitor.bluez.properties" = {
+      "bluez5.dummy-avrcp-player" = true;
+    };
+  };
+
   # --- Noctalia shell (módulo NixOS, instala el paquete a nivel de sistema) ---
   programs.noctalia = {
     enable = true;

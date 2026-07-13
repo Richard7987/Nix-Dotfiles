@@ -231,6 +231,33 @@ Hallazgos clave:
   mano (no hay manera limpia de automatizar esto sin que el proyecto
   publique releases de Linux reales).
 
+## Auditoría exhaustiva #4 (2026-07-12) — el fix de AVRCP que acababa de agregar estaba mal ubicado
+
+- **BUG real, corregido:** había puesto el fix de AVRCP de LibrePods
+  (`monitor.bluez.properties = { bluez5.dummy-avrcp-player = true }`) como
+  `xdg.configFile."wireplumber/wireplumber.conf.d/51-bluez-avrcp.conf"` en
+  home-manager, siguiendo al pie de la letra la ruta que da el README de
+  LibrePods (`~/.config/wireplumber/wireplumber.conf.d/`). Pero leyendo el
+  módulo real de NixOS para wireplumber
+  (`nixos/modules/services/desktops/pipewire/wireplumber.nix`), su config se
+  inyecta vía `XDG_DATA_DIRS` apuntando a un paquete armado en el store de
+  Nix (`services.pipewire.wireplumber.extraConfig`/`configPackages`) — el
+  servicio systemd de wireplumber que gestiona NixOS no necesariamente lee
+  `$HOME/.config/wireplumber/` de la forma en que yo asumía. El propio
+  módulo trae un ejemplo de config de bluez casi idéntico al mío usando
+  `configPackages`/`extraConfig`, lo cual confirma que esa es la vía
+  soportada/esperada en NixOS. Moví el fix a
+  `services.pipewire.wireplumber.extraConfig."51-bluez-avrcp"` en
+  `modules/desktop.nix` (forma Nix nativa, tipada) y de paso pude quitar el
+  hack de `home.activation` que reiniciaba wireplumber a mano (ya no hace
+  falta: al ser config de sistema, `nixos-rebuild switch` la aplica solo).
+- Verificado sin encontrar más problemas: `kdePackages.kleopatra` (existe en
+  `pkgs/kde/gear/kleopatra`, agregado al set `kdePackages`),
+  `nerd-fonts.jetbrains-mono` (confirmado contra
+  `pkgs/data/fonts/nerd-fonts/manifests/fonts.json` — el `caskName` real es
+  literalmente `"jetbrains-mono"`, con guion), y `pkgs.appimage-run` (existe
+  en `pkgs/top-level/all-packages.nix`).
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
