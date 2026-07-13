@@ -535,6 +535,193 @@ specify your root file system" -- el placeholder intencional de
 flake. Confirma que no queda nada más por descubrir con este comando en
 particular hasta que el placeholder se reemplace por el real.
 
+## Auditoría exhaustiva #12 (2026-07-13) — primera sesión en la máquina NixOS real, ya instalada
+
+A diferencia de las rondas 1-11 (armadas en la sesión de FreeBSD, sin acceso
+al hardware), esta ronda corrió **en la máquina NixOS ya instalada y en uso**
+(laptop Intel+Nvidia, `nixos-rebuild switch` real). Se resolvieron los
+últimos `AJUSTAR` contra hardware/software real y se encontraron varios bugs
+que solo podían aparecer en uso real (errores de Hyprland en runtime,
+Noctalia corriendo con temas reales, Forgejo real).
+
+### Placeholders finales resueltos
+
+- `hosts/ale/hardware-configuration.nix` y `system.stateVersion`/
+  `home.stateVersion` (ambos en `"26.05"`) — el usuario ya los había
+  reemplazado con los reales del instalador.
+- `modules/graphics.nix`: `lspci -D | grep -E "VGA|3D"` dio
+  `0000:00:02.0` (Intel) y `0000:01:00.0` (Nvidia) → convertidos con la
+  fórmula real del módulo (`PCI:<bus>@<domain>:<device>:<function>`,
+  decimal) a `PCI:0@0:2:0` / `PCI:1@0:0:0` — coincidían exactamente con el
+  placeholder que ya estaba puesto (casualidad, no verificación previa).
+- `hyprland.lua`: nombre de monitor `eDP-1` confirmado con `hyprctl
+  monitors` real — coincidía con el placeholder, tampoco hubo que tocarlo.
+
+### BUG real (runtime), corregido: `gestures.workspace_swipe` ya no existe
+
+Hyprland ≥0.51 eliminó por completo el toggle clásico `gestures:
+workspace_swipe` (booleano), reemplazado por un sistema de gestos nuevo.
+Confirmado leyendo el stub real instalado
+(`/nix/store/.../hyprland-0.55.4/share/hypr/stubs/hl.meta.lua`) y el
+ejemplo oficial (`share/hypr/hyprland.lua`): la sintaxis correcta es
+`hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })`.
+De paso se validó el resto de `hyprland.lua` (input/general/decoration/
+animations/monitor/workspace_rule/layer_rule/dispatchers) contra ese mismo
+stub — todo lo demás ya era válido.
+
+### Escala de monitor: `"auto"` resolvía a 1.5 en un panel 1080p
+
+`hl.monitor({ scale = "auto" })` resolvía a `1.50` en el panel real
+(1920x1080, 15.3", ~144 PPI) — reduce el espacio lógico a 1280x720,
+causando que el dock/barra de Noctalia se viera amontonado y las ventanas
+grandes. Fijado a `scale = "1"` (a pedido del usuario, tras comparar las
+tres opciones).
+
+### Integración de Noctalia: comparación contra las 3 páginas de doc oficial + el binario real
+
+Pedido explícito de verificar contra `docs.noctalia.dev/v5/compositor-
+settings/hyprland`, `.../getting-started/nixos` y `.../getting-started/
+running-the-shell`. Los requisitos de nivel NixOS (`recommendedServices`,
+NetworkManager, Bluetooth, power-profiles-daemon, upower) ya estaban
+completos desde antes. Gaps reales encontrados en `hyprland.lua`:
+
+- **Atajos IPC reales:** las rondas 1 y 6 habían dejado esto como
+  incertidumbre explícita, comentado, con un comando inventado
+  (`noctalia-shell ipc call ... toggle`). La doc oficial sí publica el
+  comando real: `noctalia msg panel-toggle launcher` / `panel-toggle
+  control-center` / `settings-toggle`. Ya no es una suposición.
+- **Teclas multimedia** cambiadas de `wpctl`/`brightnessctl` directo a
+  `noctalia msg volume-up/down/mute` y `brightness-up/down`, tal cual la
+  doc, para que se vea el OSD del propio shell.
+- **`layer_rule`** le faltaban `name = "noctalia"` y `no_anim = true`.
+- **`window_rule`** nuevo para la ventana de ajustes de Noctalia
+  (`dev.noctalia.Noctalia`, flotante, 1080×920) — no existía ninguno.
+- **Binary cache de `noctalia.cachix.org`** no estaba configurado en
+  ningún lado — sin esto cada rebuild que toca Noctalia la compila desde
+  fuente. Agregado en `hosts/ale/configuration.nix` (`nix.settings.extra-
+  substituters`/`extra-trusted-public-keys`).
+
+### BUG real, corregido: Noctalia no puede auto-inyectar su theme en Hyprland porque `hyprland.lua` es un symlink de solo lectura
+
+Noctalia genera archivos de color por template
+(`~/.config/{gtk-3.0,gtk-4.0}/noctalia.css`, `~/.config/hypr/noctalia.lua`,
+etc.) y normalmente los auto-instala en la app destino escribiendo directo
+sobre su config -- para Hyprland, su propio
+`assets/templates/hyprland/apply.sh` intenta *agregar* la línea
+`require("noctalia").apply_theme()` al final de `hyprland.lua`. Como acá
+`~/.config/hypr/hyprland.lua` es un symlink de solo lectura al store de Nix
+(gestionado por home-manager), esa escritura falla en silencio -- los
+bordes de ventana nunca tomaban el color de Noctalia pese a que
+`~/.config/hypr/noctalia.lua` sí se generaba correcto. Solución: se agregó
+el mismo `require("noctalia").apply_theme()` a mano en el `hyprland.lua`
+del repo, envuelto en `pcall` (en una instalación nueva, ese archivo no
+existe todavía en el primer arranque, antes de que Noctalia corra por
+primera vez -- sin el `pcall`, Hyprland fallaría al parsear el resto del
+archivo ese primer boot).
+
+GTK (`gtk.css` ya traía `@import "noctalia.css"` con las variables
+`@define-color` correctas de libadwaita) y kitty (`kitty.conf` ya tenía el
+`include themes/noctalia.conf`) **no tenían este problema** porque esos
+archivos no están gestionados por home-manager -- Noctalia sí pudo
+escribirlos directo. El patrón general: cualquier app cuya config SÍ esté
+declarada vía Nix/home-manager como `xdg.configFile`/símlink corre este
+mismo riesgo; el resto no.
+
+### BUG real, corregido: falta `python3` para el template `kcolorscheme` (Kleopatra)
+
+El template `kcolorscheme` (categoría KDE) depende de un script Python
+(`assets/templates/kde/apply.py`) que fusiona el color-scheme generado
+dentro de `~/.config/kdeglobals`. Sin `python3` instalado, el script no
+corre y Kleopatra nunca hereda el tema. Agregado `python3` a
+`environment.systemPackages`.
+
+### Gestor de archivos: no hay ninguno "recomendado por Noctalia"
+
+El propio README de Noctalia dice explícito que la gestión de archivos
+está fuera de su alcance ("belong to the compositor, dedicated desktop
+applications, or system services"). Verificado con `noctalia theme
+--list-templates` (binario real instalado): el único gestor de archivos
+con *template de color oficial* es `yazi` (TUI, categoría community, no
+built-in). A pedido del usuario se instalaron **Nautilus** (GTK4, hereda
+color solo vía el template built-in `gtk4`) y **yazi** (`theme.templates.
+community_ids = [ "yazi" ]`), más `services.gvfs.enable = true` (sin esto
+Nautilus no tiene papelera ni monta MTP/removibles/redes -- confirmado que
+es un `mkEnableOption` con default `false`).
+
+Nota aparte encontrada en runtime: el `community_ids` declarado vía Nix
+escribe `~/.config/noctalia/config.toml` correctamente, pero Noctalia
+**prioriza su propio estado runtime** (`~/.local/state/noctalia/
+settings.toml`, editable desde el menú de ajustes) sobre ese archivo para
+cualquier clave ya presente ahí -- confirmado leyendo el módulo real de
+home-manager (`nix/home-module.nix`: *"these settings can still be
+overwritten at runtime via the settings menu"*). Reiniciar el proceso de
+Noctalia no re-sincroniza solo; hace falta tocar el estado directamente o
+usar el menú de ajustes.
+
+### Theme + wallpapers: cambio a Gruvbox
+
+A pedido del usuario, cambiado `theme.builtin` de `"Catppuccin"` a
+`"Gruvbox"` (confirmado como valor válido del enum real en `example.toml`).
+Wallpapers instalados como **paquete Nix real** (no archivos sueltos por
+curl): input de flake `github:AngelJumbo/gruvbox-wallpapers` (tiene su
+propio `flake.nix`, expone paquetes por categoría), categoría `default`
+(554 imágenes, ~1.4GB, confirmado con la API de GitHub antes de agregarlo)
+instalada vía `home.file."Pictures/Wallpapers/gruvbox"` con
+`recursive = true`, siguiendo exactamente el patrón que documenta el
+README de ese repo para Home Manager. `programs.noctalia.settings.
+wallpaper.directory` apuntado ahí (antes vacío, `""`, sin configurar).
+Nota de procedencia: el propio README del repo de wallpapers dice que son
+contribuciones de comunidad sin licencia formal y con fuente no siempre
+rastreada -- aceptable para uso personal, no para redistribuir.
+
+### YubiKey / GPG / SSH: verificado de punta a punta en la máquina real
+
+- **SSH ya funcionaba solo** (`ssh-add -L` devuelve la llave de
+  autenticación de la card) gracias a `services.gpg-agent.
+  enableSshSupport = true`, ya configurado desde las rondas de FreeBSD.
+  No hizo falta ningún cambio.
+- **BUG real en el README, corregido:** el comando de import de GPG
+  combinaba `--recv-keys --fetch-key <url>` en una sola invocación -- gpg
+  trata cada uno como un "comando" independiente y son incompatibles entre
+  sí (`gpg: órdenes incompatibles`). Corregido a solo `--fetch-key <url>`.
+  El paso de `trust` (interactivo por naturaleza: pide nivel 1-5 +
+  confirmación) se volvió no-interactivo con
+  `echo -e "5\ny\n" | gpg --no-tty --command-fd 0 --edit-key <id> trust quit`.
+  Verificado con un commit de prueba real: `git commit -S` +
+  `git log --show-signature` mostró `Firma correcta`.
+- **BUG real, corregido: email de git no coincidía con el UID de la llave
+  GPG.** `programs.git.settings.user.email` estaba en
+  `anything.la@tuta.com`, pero la llave GPG tiene UID `ale_bnes@tuta.com`
+  (visible en "Login data" de `gpg --card-status` y en el certificado
+  importado). Forgejo verificaba la firma como criptográficamente válida
+  pero marcaba el commit como *"Firmado por un usuario no fiable que no
+  coincide con el colaborador"* porque el email no matcheaba ningún email
+  verificado de la cuenta. Corregido el email; a pedido del usuario **no**
+  se reescribió el commit ya pusheado con el email viejo (queda con la
+  advertencia, inofensivo, la firma sigue siendo válida).
+
+### Infraestructura del repo (no config de NixOS, pero bloqueaba todo lo anterior)
+
+- Todo `/nixdots` (incluido `.git`) era propiedad de `root`, no de `ale` --
+  bloqueaba tanto mis ediciones directas (tuve que copiar a un scratchpad y
+  dar comandos `sudo cp` uno por uno) como los `git add`/`commit` del
+  usuario (ni siquiera podía crear `.git/index.lock`). Resuelto con
+  `sudo chown -R ale:users /nixdots` a pedido explícito del usuario --
+  desde ese punto las ediciones ya no necesitaron el baile de sudo.
+- `git` tiraba "posesión dudosa" (`dubious ownership`) por el mismo motivo;
+  como `~/.config/git/config` es un symlink de solo lectura de
+  home-manager, `git config --global` no servía -- se resolvió con
+  `sudo git config --system --add safe.directory /nixdots` (escribe en
+  `/etc/gitconfig`, no gestionado por home-manager).
+- `origin` apuntaba al espejo de GitHub (HTTPS, pide usuario/contraseña en
+  vez de usar la YubiKey). El repo real es un Forgejo self-hosted,
+  accesible vía Tailscale por SSH
+  (`ssh://git@pcale.tail32b955.ts.net:2222/Ale/Nix-Dotfiles.git`, puerto
+  2222) -- el espejo de GitHub lo actualiza el propio Forgejo, no hace
+  falta pushear ahí a mano. Renombrado `origin` → repo real, eliminado el
+  remote del espejo. Host key de `pcale` verificada con el usuario antes
+  de agregarla a `known_hosts` (primera conexión, sin entrada previa).
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
@@ -552,3 +739,17 @@ particular hasta que el placeholder se reemplace por el real.
   `services/gpg-agent.nix`, `programs/git.nix`) y de NixOS
   (`security/doas.nix`, `hardware/video/nvidia.nix`) — opciones verificadas
   ahí, no de memoria.
+- https://docs.noctalia.dev/v5/getting-started/running-the-shell/
+- Stub Lua real instalado (`hyprland-0.55.4/share/hypr/stubs/hl.meta.lua` y
+  `share/hypr/hyprland.lua`) — usado para validar `hl.gesture`/`hl.config`/
+  `hl.window_rule`/`hl.layer_rule` contra el schema real, no la doc resumida.
+- Binario `noctalia` real instalado (`noctalia theme --list-templates`,
+  `noctalia config validate`, `noctalia msg status`, `noctalia msg
+  templates-apply`) y `assets/templates/{hyprland,kde}/apply.sh|apply.py`
+  del código fuente de `noctalia-dev/noctalia` — para entender el mecanismo
+  real de auto-instalación de temas por template, no solo la doc.
+- https://github.com/AngelJumbo/gruvbox-wallpapers (wallpapers Gruvbox,
+  paquete Nix con flake propio)
+- https://forum.hypr.land/t/new-gesture-rework-0-51/824 y
+  https://linuxiac.com/hyprland-0-51-released-with-reworked-gestures-new-options/
+  (contexto del rework de gestos en Hyprland 0.51)
