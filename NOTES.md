@@ -368,12 +368,47 @@ necesariamente el mismo mecanismo ya documentado.
   `pkgs/os-specific/linux/nvidia-x11/default.nix` (en x86_64-linux resuelve
   internamente a `production`).
 
+## Auditoría exhaustiva #8 (2026-07-12) — `example.toml` real de Noctalia contra mi `settings`, y un agente de polkit faltante
+
+- **BUG real, corregido:** ningún componente de la config (Hyprland,
+  gamemode) activa un *agente* gráfico de polkit -- solo el *daemon*
+  (`security.polkit.enable = true`, que arrancan ambos por su cuenta). Sin
+  agente, cualquier acción de una app GUI que pida privilegios vía polkit
+  (ej. NetworkManager guardando la contraseña de una red wifi) se queda
+  colgada o falla en silencio, porque no hay ningún diálogo que la
+  autorice. Noctalia trae su propio agente
+  (`src/shell/polkit/polkit_panel.cpp`), pero viene **apagado por
+  defecto** (`polkit_agent = false` en `example.toml`). Agregado
+  `shell.polkit_agent = true` a `programs.noctalia.settings` en
+  `home/ale/home.nix`.
+- **Verificado, no hacía falta tocar nada:** temí que `shell.lang` tuviera
+  que setearse a mano para que Noctalia saliera en español ahora que cambié
+  `i18n.defaultLocale`. Rastreado hasta `i18n_service.cpp`: si no hay
+  `lang` explícito en el TOML, cae a `$LANG`/`$LC_ALL`/`$LC_MESSAGES` del
+  sistema -- y confirmé que existe `assets/translations/es.json` en el repo
+  de Noctalia. La cadena completa (`i18n.defaultLocale` → `$LANG` →
+  detección automática de Noctalia → catálogo `es.json`) ya funciona sin
+  configuración adicional.
+- **Verificado mis claves de `theme` contra el `example.toml` real** (no
+  contra la doc, contra el archivo que el propio proyecto usa como
+  referencia de defaults): `mode`, `source`, `builtin = "Catppuccin"`
+  coinciden exactamente, incluyendo que `"Catppuccin"` es uno de los
+  valores válidos del enum documentado ahí mismo.
+- **Nota sobre seguridad de esta config:** `programs.noctalia.settings` con
+  `validateConfig = true` (default) corre `noctalia config validate` sobre
+  el TOML generado **en tiempo de build** (dentro de la derivación
+  `noctalia-config`). Si algún nombre de clave que puse está mal, el build
+  falla ahí con un error claro en vez de fallar en silencio en runtime --
+  vale la pena saber esto si algún día ves fallar específicamente esa
+  derivación.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
 - https://docs.noctalia.dev/v5/compositor-settings/hyprland/
 - https://github.com/noctalia-dev/noctalia (código fuente: `src/auth`,
-  `src/idle`, `src/shell/lockscreen`, `nix/package.nix`)
+  `src/idle`, `src/shell/lockscreen`, `src/shell/polkit`, `src/i18n`,
+  `nix/package.nix`, `example.toml`)
 - https://github.com/noctalia-dev/noctalia-greeter (código fuente:
   `src/greeter/greeter_sessions.cpp`, `src/main.cpp`)
 - https://github.com/hyprwm/Hyprland (`example/hyprland.desktop.in`)

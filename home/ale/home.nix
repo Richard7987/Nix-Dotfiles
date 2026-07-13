@@ -30,6 +30,18 @@
         source = "builtin";
         builtin = "Catppuccin";
       };
+      # Sin esto NO hay ningún agente de polkit corriendo (Hyprland/gamemode
+      # solo activan el daemon de polkit, no un agente gráfico) -- acciones
+      # con privilegios de apps GUI (ej. NetworkManager guardando una
+      # contraseña wifi) fallarían en silencio sin diálogo que las autorice.
+      # Noctalia trae su propio agente (src/shell/polkit/), pero viene
+      # apagado por defecto (polkit_agent = false en example.toml).
+      shell.polkit_agent = true;
+      # shell.lang: sin setear a propósito. i18n_service.cpp cae a
+      # $LANG/$LC_ALL/$LC_MESSAGES si no hay preferencia explícita, y ya
+      # tenemos i18n.defaultLocale = "es_MX.UTF-8" a nivel de sistema
+      # (hosts/ale/configuration.nix) -- confirmado que existe catálogo
+      # es.json en assets/translations/, así que la UI sale en español sola.
     };
   };
 
