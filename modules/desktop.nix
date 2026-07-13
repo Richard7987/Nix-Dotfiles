@@ -58,21 +58,25 @@
   # verificado contra el ejemplo de bluez del propio módulo en nixpkgs
   # (nixos/modules/services/desktops/pipewire/wireplumber.nix).
   # NO correr mpris-proxy a la vez -- entra en conflicto con esto.
-  # bluez5.codecs restringido a "sbc" -- diagnosticado en vivo en esta máquina:
-  # el códec por defecto que negociaba (sbc_xq, mayor bitrate) producía audio
-  # cortado/entrecortado en los AirPods con el adaptador Bluetooth de esta
-  # laptop (Intel AC9560). Confirmado con una prueba de control (mismos
-  # AirPods sonando perfecto en el celular) que no era ni el hardware de los
-  # AirPods ni el entorno, y con `wpctl set-profile` forzando "a2dp-sink-sbc"
-  # que el audio queda limpio. Propiedad real confirmada contra la doc de
-  # PipeWire (pipewire-props(7): "bluez5.codecs # JSON array of string --
-  # Enabled A2DP codecs (default: all)"). Restringir acá (nivel de sistema)
-  # es más robusto que parchear LibrePods -- ninguna app va a poder pedir
-  # sbc_xq/aac si ni siquiera se ofrecen en la negociación.
+  # bluez5.codecs restringido -- diagnosticado en vivo en esta máquina: el
+  # códec que negociaba por defecto (sbc_xq, mayor bitrate) producía audio
+  # cortado en los AirPods con el adaptador Bluetooth de esta laptop (Intel
+  # AC9560). Confirmado con una prueba de control (mismos AirPods sonando
+  # perfecto en el celular) que no era ni el hardware de los AirPods ni el
+  # entorno. Propiedad real confirmada contra la doc de PipeWire
+  # (pipewire-props(7): "bluez5.codecs # JSON array of string -- Enabled
+  # A2DP codecs (default: all)"). Restringir acá (nivel de sistema) es más
+  # robusto que parchear LibrePods -- ninguna app puede pedir un códec que
+  # ni siquiera se ofrece en la negociación.
+  # "aac" agregado temporalmente (2026-07-13) para comparar contra "sbc":
+  # sbc sonó bien al principio pero se degradó tras un rato de uso -- puede
+  # ser que ninguno de los dos aguante sostenido en este adaptador. Si tras
+  # probar aac un buen rato tampoco aguanta, hay que investigar otra causa
+  # (térmica/firmware) en vez de seguir cambiando códecs.
   services.pipewire.wireplumber.extraConfig."51-bluez-avrcp" = {
     "monitor.bluez.properties" = {
       "bluez5.dummy-avrcp-player" = true;
-      "bluez5.codecs" = [ "sbc" ];
+      "bluez5.codecs" = [ "sbc" "aac" ];
     };
   };
 
@@ -115,7 +119,18 @@
                    # (assets/templates/kde/apply.py escribe ~/.config/kdeglobals
                    # para que Kleopatra herede el color) -- sin esto el script
                    # falla en silencio y Kleopatra se queda con el tema por defecto.
+    kdePackages.breeze              # estilo Qt que renderiza la paleta de KDE
+    kdePackages.plasma-integration  # plugin de QPA platform theme (KDEPlasmaPlatformTheme6.so)
+                                    # que aplica kdeglobals a cualquier app Qt -- sin esto
+                                    # kdeglobals ya tenía los colores de Noctalia correctos
+                                    # (confirmado con un cat real) pero nada los usaba: ni
+                                    # Kleopatra ni pinentry-qt (el diálogo de PIN de la
+                                    # YubiKey) los mostraban.
   ];
+
+  # Necesario para que QT_QPA_PLATFORMTHEME=kde (de abajo) resuelva al plugin
+  # de plasma-integration en vez de caer al tema Qt genérico sin colores.
+  environment.sessionVariables.QT_QPA_PLATFORMTHEME = "kde";
 
   # Sin esto, Nautilus no tiene papelera, ni monta MTP/almacenamiento
   # removible/shares de red -- confirmado que services.gvfs.enable es un
