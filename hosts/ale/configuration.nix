@@ -25,7 +25,7 @@
 
   # --- Zona horaria / locale ---
   time.timeZone = lib.mkDefault "America/Mexico_City"; # AJUSTAR si no es tu zona
-  i18n.defaultLocale = "en_US.UTF-8";
+  i18n.defaultLocale = "es_MX.UTF-8";
 
   # --- Usuario ---
   users.users.ale = {

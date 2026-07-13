@@ -346,6 +346,28 @@ lo arregló al toque la segunda vez; se resolvió solo unos segundos después.
 Vale la pena vigilar si se repite seguido — podría ser algo nuevo, no
 necesariamente el mismo mecanismo ya documentado.
 
+## Auditoría exhaustiva #7 (2026-07-12) — dos preguntas reales al usuario + verificaciones finales
+
+- **Idioma del sistema:** tenía `i18n.defaultLocale = "en_US.UTF-8"` puesto
+  sin confirmarlo — afecta el idioma de casi todas las apps GTK/Qt (Noctalia,
+  Kleopatra, etc.), no solo formato de fecha/moneda. Le pregunté al usuario:
+  eligió español. Cambiado a `es_MX.UTF-8` (coherente con
+  `time.timeZone = "America/Mexico_City"`). El teclado se queda en
+  `us+altgr-intl` como ya estaba — layout de teclado e idioma del sistema son
+  independientes, no hay conflicto.
+- **Huella digital:** revisando `src/auth/fingerprint_authenticator.cpp` de
+  Noctalia vi que su pantalla de bloqueo soporta desbloqueo por huella vía
+  D-Bus (`net.reactivated.Fprint`, la interfaz estándar de `fprintd`) si el
+  sistema lo tiene habilitado (`services.fprintd.enable`). Le pregunté al
+  usuario si su laptop tiene lector — no tiene, así que no se agregó nada.
+- Verificado sin encontrar problemas: consistencia de argumentos de función
+  (`lib`/`inputs`/`pkgs`/`config`) en los 8 archivos `.nix` del repo tras
+  todas las rondas de ediciones — ningún uso de un argumento que no esté en
+  la firma. Y `hardware.nvidia.package = ...nvidiaPackages.stable` — 
+  confirmado como atributo real contra
+  `pkgs/os-specific/linux/nvidia-x11/default.nix` (en x86_64-linux resuelve
+  internamente a `production`).
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
