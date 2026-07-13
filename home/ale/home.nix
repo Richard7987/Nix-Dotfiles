@@ -111,7 +111,12 @@
     # con nix eval real ("has been renamed to `programs.git.settings.user.*'").
     settings.user = {
       name = "ale";
-      email = "anything.la@tuta.com";
+      # Debe coincidir con el UID de la llave GPG (ale_bnes@tuta.com, ver
+      # "Login data" en `gpg --card-status`) -- si no coincide, Forgejo
+      # verifica la firma correctamente pero la marca como "usuario no
+      # fiable que no coincide con el colaborador" porque el email del
+      # commit no matchea ningún email verificado de la cuenta.
+      email = "ale_bnes@tuta.com";
     };
     signing = {
       key = "DBD5F61D8A0A14D7";
