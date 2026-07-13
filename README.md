@@ -15,8 +15,8 @@ Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://d
 - **sudo** (con reglas `NOPASSWD` puntuales para `tailscale` y el restart de
   `pcscd`, ver `modules/yubikey.nix`), **zen-browser** y **Kleopatra**.
 - **Bluetooth** + fix de AVRCP para controles de reproducción, y **LibrePods**
-  para controlar AirPods (modos de ruido, batería, etc.) — ver sección
-  dedicada más abajo, la instalación del AppImage es manual.
+  para controlar AirPods (modos de ruido, batería, etc.) — compilado de
+  fuente (`pkgs/librepods.nix`), sin AppImage ni pasos manuales.
 
 ## Antes del primer `nixos-rebuild switch`
 
@@ -98,19 +98,19 @@ sudo nixos-rebuild switch --flake .#ale
   declarados en `hyprland.lua` con el comando IPC real (`noctalia msg
   panel-toggle ...` / `settings-toggle`), confirmado contra la doc oficial.
   Ya no es "revisa si funciona por su cuenta" — está resuelto explícito.
-- **❌ LibrePods (AirPods) — sigue pendiente, es manual a propósito.** No hay
-  paquete Nix oficial (el proyecto está reescribiéndose de Qt6/C++ a Rust, y
-  en Linux solo publica AppImages nightly como artifacts de GitHub Actions,
-  sin URL estable para fijar por hash). Descarga manual, una vez y cada vez
-  que quieras actualizar:
-  1. https://github.com/kavishdevar/librepods/actions/workflows/ci-linux-rust.yml
-  2. Entra al run exitoso más reciente → Artifacts → descarga el AppImage
-     (necesitas sesión de GitHub, los artifacts están detrás de login)
-  3. `mkdir -p ~/Applications && mv LibrePods*.AppImage ~/Applications/LibrePods.AppImage && chmod +x ~/Applications/LibrePods.AppImage`
-  4. Corre `librepods` (alias ya configurado, usa `appimage-run` por debajo)
+- **✅ LibrePods (AirPods)** — ya no es manual. No hay paquete Nix oficial ni
+  release de Linux en GitHub (el binario real vive en la rama `linux/rust`
+  de una PR sin mergear, kavishdevar/librepods#241, sin releases publicados),
+  pero resultó ser un proyecto Cargo normal sin nada específico de AppImage
+  en runtime -- se compila de fuente directo en `pkgs/librepods.nix`
+  (`rustPlatform.buildRustPackage`, pineado a un commit). Build verificado en
+  vivo en esta máquina (compila, corre, `autoPatchelfHook` resuelve
+  vulkan-loader/wayland/libpulseaudio/dbus sin faltantes). Corre `librepods`
+  directo, sin AppImage ni `appimage-run`. Para actualizar a una versión más
+  nueva: actualizar `rev`/`hash` en `pkgs/librepods.nix` a mano (no hay
+  releases con versión estable que trackear automáticamente).
 
   El fix de AVRCP para que play/pause/skip funcionen desde los AirPods ya
   está aplicado a nivel de sistema
   (`services.pipewire.wireplumber.extraConfig` en `modules/desktop.nix`), se
-  aplica solo en cada `nixos-rebuild switch` — esta parte **no** requiere
-  nada manual, solo la descarga del AppImage en sí.
+  aplica solo en cada `nixos-rebuild switch`.
