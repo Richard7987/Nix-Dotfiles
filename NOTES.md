@@ -507,6 +507,34 @@ debería) seguir corriendo `nix eval`/`nix flake check` en futuras rondas en
 vez de depender solo de lectura de código fuente -- es estrictamente más
 confiable.
 
+## Auditoría exhaustiva #11 (2026-07-12) — inspección de datos reales vía `nix eval --json` + `nix flake check`
+
+Con Nix ya instalado, esta ronda volcó la **estructura de datos real** (no
+solo "¿evalúa sin error?") de las tres piezas de config más delicadas para
+verificar anidamiento, con `nix eval --json`:
+
+- `security.sudo.extraRules` → `[{root,ALL},{wheel,ALL},{ale,pcscd
+  NOPASSWD},{ale,tailscale NOPASSWD}]` -- confirma que `lib.mkAfter` puso
+  mis reglas después de las del módulo, en el orden correcto.
+- `home-manager.users.ale.programs.noctalia.settings` →
+  `{"shell":{"polkit_agent":true},"theme":{"builtin":"Catppuccin","mode":"dark","source":"builtin"}}`
+  -- confirma que `shell.polkit_agent = true;` (azúcar de ruta de atributo
+  de Nix) generó anidamiento real, no una clave plana con punto literal.
+- `services.pipewire.wireplumber.extraConfig` →
+  `{"51-bluez-avrcp":{"monitor.bluez.properties":{"bluez5.dummy-avrcp-player":true}}}`
+  -- confirma el uso correcto de claves de string citadas (con puntos
+  literales, el formato que espera WirePlumber) en vez de azúcar de ruta.
+
+Las tres coincidieron exactamente con lo esperado. Sin bugs nuevos, pero es
+verificación real, no supuesta.
+
+También corrí `nix flake check --no-build`: falla, pero **solo** por el
+mensaje estándar y esperado de NixOS ("The 'fileSystems' option does not
+specify your root file system" -- el placeholder intencional de
+`hardware-configuration.nix`), no por ningún otro check adicional del
+flake. Confirma que no queda nada más por descubrir con este comando en
+particular hasta que el placeholder se reemplace por el real.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
