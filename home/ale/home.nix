@@ -55,7 +55,11 @@
     enable = true;
     scdaemonSettings = {
       disable-ccid = true; # por si algún día hay conflicto con el CCID interno, igual que en FreeBSD
-      card-timeout = 5;
+      # STRING, no entero: el tipo de scdaemonSettings es "string or bool or
+      # list of string" (confirmado con nix eval real -- con un entero acá
+      # fallaba TODO el build: "is not of type `string or boolean or list of
+      # string'"). El texto generado sale igual: "card-timeout 5".
+      card-timeout = "5";
     };
   };
 
@@ -86,8 +90,12 @@
   # --- git: firma de commits con la YubiKey ---
   programs.git = {
     enable = true;
-    userName = "ale";
-    userEmail = "anything.la@tuta.com";
+    # settings.user.* (no userName/userEmail sueltos): renombrado, confirmado
+    # con nix eval real ("has been renamed to `programs.git.settings.user.*'").
+    settings.user = {
+      name = "ale";
+      email = "anything.la@tuta.com";
+    };
     signing = {
       key = "DBD5F61D8A0A14D7";
       format = "openpgp";

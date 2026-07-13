@@ -40,6 +40,19 @@ los archivos:
 4. **`home/ale/hyprland.lua`** — nombre de monitor (`hyprctl monitors`, línea
    `hl.workspace_rule` con `"eDP-1"` como placeholder).
 
+## Validado con `nix eval` real
+
+Esta config fue evaluada de punta a punta con Nix real (instalado vía `pkg
+install nix` en la sesión de FreeBSD donde se armó, usando un store local
+sin privilegios: `NIX_REMOTE="local?root=$HOME/.nix-testroot"`). Con un
+`fileSystems."/"` temporal de prueba (revertido después),
+`config.system.build.toplevel.drvPath` se construyó sin errores, todas las
+`assertions` del sistema evaluaron `true`, y cada paquete referenciado en
+`environment.systemPackages`/`home.packages` resolvió contra el nixpkgs
+real. `flake.lock` en este repo viene de esa corrida. Sigue habiendo cosas
+que solo se pueden probar en la máquina real (arranque, hardware, sesión
+gráfica) — ver "Antes del primer switch" arriba.
+
 ## Primer despliegue
 
 ```sh

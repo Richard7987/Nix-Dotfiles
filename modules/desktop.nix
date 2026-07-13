@@ -27,7 +27,7 @@
 
   # --- Audio (pipewire) — necesario para que los atajos wpctl del hyprland.lua funcionen ---
   security.rtkit.enable = true;
-  hardware.pulseaudio.enable = false;
+  services.pulseaudio.enable = false; # renombrado desde hardware.pulseaudio (confirmado con nix eval real)
   services.pipewire = {
     enable = true;
     alsa.enable = true;
@@ -76,7 +76,7 @@
   fonts.packages = with pkgs; [
     nerd-fonts.jetbrains-mono
     noto-fonts
-    noto-fonts-emoji
+    noto-fonts-color-emoji # renombrado desde noto-fonts-emoji (confirmado con nix eval real: el nombre viejo tira error duro)
   ];
 
   environment.systemPackages = with pkgs; [

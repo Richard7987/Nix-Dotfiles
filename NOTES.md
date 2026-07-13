@@ -437,6 +437,76 @@ A pedido explícito de "revisa toda la sintaxis" en vez de solo leer:
   búsquedas (terminal inutilizable con `prime-run`, etc.) son específicos
   del modo *offload* -- no aplican al modo *sync* que se eligió a propósito.
 
+## Auditoría exhaustiva #10 (2026-07-12) — validación con Nix REAL instalado, no solo revisión manual
+
+Esta ronda cambió de método por completo: se instaló `nix` de verdad
+(`pkg install nix`, soporte experimental de FreeBSD, versión 2.32.4) y se
+usó un store local sin privilegios (`NIX_REMOTE="local?root=$HOME/.nix-testroot"`,
+sin necesitar root ni build users) para correr `nix eval` real sobre el
+flake. Esto reemplazó por primera vez la verificación manual/heurística de
+las 9 rondas anteriores por evaluación real del propio Nix.
+
+**Validado con éxito, en orden creciente de profundidad:**
+1. `nix flake metadata` — los 5 inputs (nixpkgs, home-manager, noctalia,
+   noctalia-greeter, zen-browser) resuelven y generan un `flake.lock` real
+   (agregado al repo).
+2. `config.networking.hostName` — confirma que el árbol completo de
+   módulos (flake → configuration.nix → los 4 módulos → integración
+   home-manager → módulos de noctalia/noctalia-greeter) se resuelve sin
+   errores de import ni de sintaxis.
+3. `environment.systemPackages` y `home-manager.users.ale.home.packages`
+   — **se forzó la resolución de CADA nombre de paquete usado en todo el
+   repo** contra el nixpkgs real. Todos resolvieron: `kleopatra`,
+   `zen-beta`, `cudaPackages.cudatoolkit` (resuelve internamente a
+   `cuda-merged`), `claude-code`, `appimage-run`, etc.
+4. `config.assertions` — las ~1000 aserciones del sistema completo
+   evaluaron `true` (lista de fallidas: `[]`).
+5. `config.system.build.toplevel.drvPath` — la prueba más fuerte posible
+   sin compilar binarios Linux desde FreeBSD: construye la derivación
+   completa del sistema. **Se resolvió con éxito** tras corregir los bugs
+   de abajo:
+   `/nix/store/kmfljanxmdpr5h06q28255w22l4mfd95-nixos-system-ale-26.11.20260711.e7a3ca8.drv`
+
+Para llegar al paso 4-5 hizo falta parchear temporalmente
+`hosts/ale/hardware-configuration.nix` con un `fileSystems."/"` ficticio
+(el placeholder real no tiene ninguno, lo cual por sí solo hace tropezar la
+lógica interna de `nixos/modules/tasks/filesystems.nix` al construir el
+*mensaje* de una aserción de detección de ciclos -- no es un bug mío, es
+un efecto secundario de forzar la evaluación de mensajes de aserciones que
+normalmente son perezosos). El parche se revirtió con
+`git checkout -- hosts/ale/hardware-configuration.nix` en cuanto terminó la
+prueba; el placeholder real no cambió.
+
+### Bugs reales encontrados por el evaluador que la revisión manual (9 rondas) no había atrapado
+
+- **`home/ale/home.nix`: `programs.gpg.scdaemonSettings.card-timeout = 5;`**
+  — tipo incorrecto. El tipo real es `string or boolean or list of string`,
+  no entero. Con esto el build entero fallaba con
+  `is not of type 'string or boolean or list of string'`. Corregido a
+  `card-timeout = "5";` (el texto generado en `scdaemon.conf` es idéntico).
+- **`modules/desktop.nix`: `fonts.packages` tenía `noto-fonts-emoji`** —
+  renombrado en nixpkgs a `noto-fonts-color-emoji`; el nombre viejo tira un
+  error duro (no solo deprecation warning). Corregido.
+- **`modules/desktop.nix`: `hardware.pulseaudio.enable`** — renombrado a
+  `services.pulseaudio.enable` (warning de deprecación, no error duro
+  todavía, pero corregido igual para no depender del alias).
+- **`home/ale/home.nix`: `programs.git.userName`/`userEmail`** —
+  renombrados a `programs.git.settings.user.name`/`.email` (mismo caso,
+  warning por ahora). Corregido.
+
+Ninguno de estos cuatro se podía haber atrapado sin evaluar contra el
+nixpkgs real de este momento -- son renombres/cambios de tipo que
+ocurrieron en algún punto de la historia de nixpkgs/home-manager después de
+que yo hubiera verificado esos módulos contra el código fuente en rondas
+anteriores (el código que leí en su momento coincidía con lo que escribí;
+lo que cambió fue la versión de nixpkgs resuelta por el flake, que apunta a
+`nixos-unstable` y por lo tanto a HEAD en movimiento).
+
+**Conclusión práctica:** con Nix instalado en esta sesión, se puede (y
+debería) seguir corriendo `nix eval`/`nix flake check` en futuras rondas en
+vez de depender solo de lectura de código fuente -- es estrictamente más
+confiable.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
