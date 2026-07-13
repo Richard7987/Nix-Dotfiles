@@ -92,7 +92,35 @@
   # --- zsh ---
   programs.zsh = {
     enable = true;
+    # Sin "theme" acá a propósito -- el prompt real lo pone Powerlevel10k
+    # (fuente más abajo, en initContent), no un theme de oh-my-zsh.
+    oh-my-zsh = {
+      enable = true;
+      plugins = [ "git" "sudo" ];
+    };
     initContent = ''
+      # Powerlevel10k -- bloques de color sólidos + wizard interactivo de
+      # configuración (fuentes/símbolos/una o dos líneas/conectado o no) la
+      # primera vez que abras una terminal, porque a propósito NO se pre-crea
+      # ~/.p10k.zsh: p10k detecta que no existe y lanza `p10k configure` solo.
+      # Corre después de oh-my-zsh (mismo bloque de initContent, se concatena
+      # con orden por defecto 1000, y el de oh-my-zsh usa mkOrder 800 -- más
+      # bajo sale primero) para pisar cualquier prompt que oh-my-zsh hubiera
+      # puesto. gitstatus (paquete separado, da el binario gitstatusd) es
+      # necesario en PATH para el estado de git rápido -- sin él, el plugin
+      # de p10k intentaría bajarlo en runtime, cosa que falla en un sandbox
+      # de Nix sin red.
+      source ${pkgs.zsh-powerlevel10k}/share/zsh-powerlevel10k/powerlevel10k.zsh-theme
+
+      # Config generada por `p10k configure` -- copiada al repo
+      # (home/ale/p10k.zsh) y declarada vía home.file más abajo, para que
+      # sea reproducible igual que el resto de la config. Si vuelves a
+      # correr `p10k configure`, el wizard va a decir de nuevo que no puede
+      # escribir ~/.zshrc (normal, es un symlink de home-manager) -- elige
+      # "n", y después copia el ~/.p10k.zsh que sí actualiza a
+      # home/ale/p10k.zsh para que el cambio quede permanente.
+      source ~/.p10k.zsh
+
       # Reinicia pcscd + gpg-agent si la YubiKey deja de responder
       # (equivalente al comando `yubico` que tenías en FreeBSD)
       yubico() {
@@ -103,6 +131,8 @@
       }
     '';
   };
+
+  home.file.".p10k.zsh".source = ./p10k.zsh;
 
   # --- git: firma de commits con la YubiKey ---
   programs.git = {
@@ -135,5 +165,7 @@
   home.packages = with pkgs; [
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
+    gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
+    meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
   ];
 }
