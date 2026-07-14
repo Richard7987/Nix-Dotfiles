@@ -234,5 +234,14 @@
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
     fzf # binario que fzf-tab invoca para el menú interactivo del Tab (ver programs.zsh.plugins)
+    gpu-screen-recorder # dependencia del plugin oficial "screen_recorder" de Noctalia
+      # (noctalia-dev/official-plugins) -- el plugin solo hace de wrapper/IPC,
+      # busca este binario en PATH. El derivation de nixpkgs ya wrappea
+      # LD_LIBRARY_PATH con /run/opengl-driver/lib, que trae las libs NVENC
+      # de Nvidia gracias a hardware.graphics.enable + hardware.nvidia.* de
+      # modules/graphics.nix -- no hace falta ningún override extra. El
+      # portal (xdg-desktop-portal-hyprland) ya lo activa
+      # programs.hyprland.enable solo. El plugin en sí NO se declara acá --
+      # Noctalia v5 lo baja y activa en runtime (ver instrucción abajo).
   ];
 }

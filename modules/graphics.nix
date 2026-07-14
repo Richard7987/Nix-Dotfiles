@@ -34,7 +34,14 @@
     # open = true (módulo kernel open-source de Nvidia).
     open = false;
 
-    package = config.boot.kernelPackages.nvidiaPackages.stable;
+    # "stable" (595.84 al momento de escribir esto) dejó de soportar Pascal
+    # (GP10x, incluye la GTX 1050 de esta laptop) -- confirmado en vivo:
+    # `dmesg` mostraba "NVRM: No NVIDIA GPU found" y el módulo nvidia
+    # cargaba pero sin bindear la GPU (lsmod sin nvidia, sin /dev/dri/card0
+    # de nvidia, nvidia-smi fallaba). El propio log del kernel lo dice:
+    # "supported through the NVIDIA 580.xx Legacy drivers". legacy_580
+    # (580.173.02) es la rama correcta para Pascal.
+    package = config.boot.kernelPackages.nvidiaPackages.legacy_580;
 
     prime = {
       sync.enable = true;
