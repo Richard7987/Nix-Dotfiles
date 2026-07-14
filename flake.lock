@@ -117,6 +117,26 @@
         "type": "github"
       }
     },
+    "psysonic": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1783979082,
+        "narHash": "sha256-dPcHzu5IZiaCsyMuAeqhaZ2rDHCcj196rrlwVlH4TJI=",
+        "owner": "Psychotoxical",
+        "repo": "psysonic",
+        "rev": "fd19419ac28b64ca6079e41f1c0769a4dd27632f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Psychotoxical",
+        "repo": "psysonic",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "gruvbox-wallpapers": "gruvbox-wallpapers",
@@ -124,6 +144,7 @@
         "nixpkgs": "nixpkgs",
         "noctalia": "noctalia",
         "noctalia-greeter": "noctalia-greeter",
+        "psysonic": "psysonic",
         "zen-browser": "zen-browser"
       }
     },

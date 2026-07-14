@@ -1,4 +1,4 @@
-{ config, pkgs, inputs, ... }:
+{ config, pkgs, lib, inputs, ... }:
 
 {
   imports = [
@@ -121,7 +121,42 @@
       enable = true;
       plugins = [ "git" "sudo" ];
     };
-    initContent = ''
+    # fzf-tab -- menú interactivo con fuzzy-search en el Tab (en vez de la
+    # lista plana de zsh). Va acá (programs.zsh.plugins, no oh-my-zsh.plugins
+    # porque no es un plugin bundled de oh-my-zsh) para que se sourcee vía el
+    # mecanismo genérico de home-manager, que carga a mkOrder 900 -- DESPUÉS
+    # del compinit que corre oh-my-zsh (mkOrder 800, ver "source $ZSH/oh-my-
+    # zsh.sh" en modules/programs/zsh/plugins/oh-my-zsh.nix). Confirmado
+    # contra el README real de fzf-tab: exige cargarse "after compinit, but
+    # before plugins which will wrap widgets" (zsh-autosuggestions, fast-
+    # syntax-highlighting) -- ver el bloque de autosuggestions más abajo.
+    plugins = [
+      {
+        name = "fzf-tab";
+        src = pkgs.zsh-fzf-tab;
+        file = "share/fzf-tab/fzf-tab.plugin.zsh";
+      }
+    ];
+    # zsh-syntax-highlighting -- colorea el comando mientras lo escribís:
+    # verde si el comando/alias/función existe, rojo si no. Opción nativa de
+    # home-manager (a diferencia de autosuggestion.enable, esta SÍ sourcea en
+    # mkOrder 1200 por defecto -- confirmado en modules/programs/zsh/
+    # default.nix -- que ya cae después de fzf-tab (900), como exige su
+    # README, sin necesitar ningún mkOrder manual).
+    syntaxHighlighting.enable = true;
+    initContent = lib.mkMerge [
+      # zsh-autosuggestions -- sourceado a mano (NO con la opción nativa
+      # programs.zsh.autosuggestion.enable) porque esa opción fija su propio
+      # mkOrder en 700, es decir ANTES del compinit de oh-my-zsh (800) y
+      # ANTES de fzf-tab (900) -- el orden opuesto al que exige el README de
+      # fzf-tab (compinit -> fzf-tab -> autosuggestions). mkOrder 950 acá
+      # deja la secuencia real: compinit (800) -> fzf-tab (900) ->
+      # autosuggestions (950) -> resto del initContent (1000, sin envolver
+      # -- ver comentario de p10k debajo).
+      (lib.mkOrder 950 ''
+        source ${pkgs.zsh-autosuggestions}/share/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
+      '')
+      ''
       # Powerlevel10k -- bloques de color sólidos + wizard interactivo de
       # configuración (fuentes/símbolos/una o dos líneas/conectado o no) la
       # primera vez que abras una terminal, porque a propósito NO se pre-crea
@@ -158,7 +193,8 @@
       # sale una advertencia de "console output during initialization" (el
       # wizard eligió modo Verbose), es solo informativa, no rompe nada.
       pfetch
-    '';
+      ''
+    ];
   };
 
   home.file.".p10k.zsh".source = ./p10k.zsh;
@@ -197,5 +233,6 @@
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
+    fzf # binario que fzf-tab invoca para el menú interactivo del Tab (ver programs.zsh.plugins)
   ];
 }

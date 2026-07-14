@@ -126,9 +126,10 @@
                                     # (confirmado con un cat real) pero nada los usaba: ni
                                     # Kleopatra ni pinentry-qt (el diálogo de PIN de la
                                     # YubiKey) los mostraban.
-    feishin  # cliente de música self-hosted (Navidrome/Jellyfin/Subsonic) --
-             # ya empaquetado en nixpkgs. Hace falta apuntarlo a un servidor
-             # la primera vez que se abre.
+    inputs.psysonic.packages.${pkgs.stdenv.hostPlatform.system}.default
+      # cliente de música self-hosted (Navidrome), reemplaza a feishin --
+      # empaquetado vía su propio flake.nix (no está en nixpkgs). Hace
+      # falta apuntarlo a un servidor la primera vez que se abre.
   ];
 
   # Necesario para que QT_QPA_PLATFORMTHEME=kde (de abajo) resuelva al plugin

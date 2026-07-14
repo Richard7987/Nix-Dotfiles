@@ -852,6 +852,87 @@ antes de que `nixos-rebuild build/switch` lo pueda ver. Vale la pena
 recordar este patrón para la próxima vez que se agregue un archivo nuevo,
 en vez de sorprenderse de nuevo con el mismo error.
 
+## Reproductor de música: Feishin → Psysonic, y completado de terminal (2026-07-13)
+
+### Feishin → Psysonic
+
+A pedido del usuario, reemplazado `feishin` (paquete de nixpkgs) por
+[Psysonic](https://github.com/Psychotoxical/psysonic) en
+`environment.systemPackages` (`modules/desktop.nix`) — cliente de música
+self-hosted (Navidrome) igual que Feishin, pero Tauri (React+Rust) en vez de
+Electron. Verificado contra el repo real (no de memoria): tiene su propio
+`flake.nix` (no está en nixpkgs), expone `packages.<system>.default`.
+Agregado como input de flake (`flake.nix`, mismo patrón que `zen-browser`:
+`inputs.nixpkgs.follows = "nixpkgs"`), y referenciado en `desktop.nix` como
+`inputs.psysonic.packages.${pkgs.stdenv.hostPlatform.system}.default`.
+Verificado con `nix eval` que `psysonic` aparece en `environment.
+systemPackages` en lugar de `feishin`, y que `config.assertions` sigue en
+`[]`. `~/.config/feishin` (config vieja) borrado a pedido del usuario.
+**Pendiente manual:** correr `sudo nixos-rebuild switch --flake /nixdots#ale`
+para aplicar (no lo corrí yo, ver política de acciones de sistema).
+
+### fzf-tab + zsh-autosuggestions
+
+A pedido del usuario ("sugerencias de completado" en la terminal): agregado
+menú interactivo con fuzzy-search en Tab (`zsh-fzf-tab`) y autosugerencias
+tipo fish desde el historial (`zsh-autosuggestions`), en `home/ale/home.nix`.
+
+- **Riesgo real evitado, no un bug ya cometido:** iba a usar la opción nativa
+  `programs.zsh.autosuggestion.enable`, pero leyendo el código fuente real de
+  home-manager (`modules/programs/zsh/default.nix`, rev
+  `7566825d4652a1b885bd4ce65bd9e8def432fec9`) confirmé que esa opción fija su
+  propio `lib.mkOrder 700` para el `source` de zsh-autosuggestions — que
+  carga ANTES del `compinit` de oh-my-zsh (`mkOrder 800`,
+  `modules/programs/zsh/plugins/oh-my-zsh.nix`) y ANTES de donde cargaría
+  `fzf-tab` vía el mecanismo genérico `programs.zsh.plugins` (`mkOrder 900`,
+  `modules/programs/zsh/plugins/default.nix`). Confirmé contra el README real
+  de `Aloxaf/fzf-tab` (no de memoria) que el orden exigido es exactamente el
+  opuesto: *"fzf-tab needs to be loaded after compinit, but before plugins
+  which will wrap widgets, such as zsh-autosuggestions"*. Con la opción
+  nativa, el orden real habría sido autosuggestions(700) → compinit(800) →
+  fzf-tab(900) — al revés dos veces.
+- **Solución:** `fzf-tab` vía `programs.zsh.plugins` (carga a 900, después
+  del compinit de oh-my-zsh a 800 — correcto solo). `zsh-autosuggestions`
+  sourceado a mano dentro de `initContent` envuelto en `lib.mkOrder 950`
+  (en vez de la opción nativa), para que quede después de fzf-tab. Verificado
+  con `nix eval` el `.zshrc` generado completo: el orden real es
+  `compinit(800) → fzf-tab(900) → autosuggestions(950) → resto(1000, p10k/
+  yubico/pfetch, sin envolver, como ya estaba)` — exactamente el exigido.
+- Agregado `pkgs.fzf` a `home.packages` (binario que `fzf-tab` invoca para
+  el menú; no era necesario antes porque nada lo requería).
+- Requirió agregar `lib` a la firma de `home.nix` (`{ config, pkgs, inputs,
+  ... }` no lo traía) para poder usar `lib.mkMerge`/`lib.mkOrder` en
+  `initContent`.
+- Paquetes `zsh-fzf-tab` y `zsh-autosuggestions` confirmados como atributos
+  reales de nixpkgs (`nix build` real, no solo `nix eval` del outPath) antes
+  de usarlos, y sus rutas de archivo `.plugin.zsh` confirmadas listando el
+  store path ya construido, no asumidas por convención de nombre.
+
+## zsh-syntax-highlighting (2026-07-13)
+
+A pedido del usuario ("colores en la terminal, comandos que existen de un
+color y los que no de otro" -- exactamente lo que hace `zsh-syntax-
+highlighting`, la herramienta estándar para esto). A diferencia de
+`autosuggestion.enable` (ver sección anterior), la opción nativa
+`programs.zsh.syntaxHighlighting.enable` **sí** sourcea en el orden correcto
+por defecto: confirmado en `modules/programs/zsh/default.nix` que usa
+`lib.mkOrder 1200`, que cae después de `fzf-tab` (900) sin necesitar ningún
+`mkOrder` manual -- satisface igual el requisito del README de fzf-tab
+("before plugins which will wrap widgets"). Verificado con `nix eval` el
+`.zshrc` generado: orden real `compinit(31) → fzf-tab(35) →
+autosuggestions(61) → zsh-syntax-highlighting(103)`. `config.assertions`
+sigue en `[]`.
+
+## Reproductor de música: Feishin → Psysonic, caché binario y completado de terminal -- resumen de cambios previos
+
+Ver secciones de arriba para el detalle completo: reemplazo de Feishin por
+Psysonic (input de flake propio + `psysonic.cachix.org` agregado en
+`hosts/ale/configuration.nix` tras el primer switch sin caché, que tardó
+~23 min compilando npm+Rust/Tauri desde cero), y fzf-tab + zsh-
+autosuggestions (con el bug de orden evitado, ver arriba). Todo aplicado con
+éxito en la máquina real (`nixos-rebuild switch` confirmado por el usuario:
+`Done.`, sin errores).
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
@@ -893,3 +974,13 @@ en vez de sorprenderse de nuevo con el mismo error.
   `gtk.enable` no toca `gtk.css` salvo `extraCss`), `modules/programs/zsh/
   plugins/oh-my-zsh.nix`, y `share/oh-my-zsh/oh-my-zsh.sh` real instalado
   (confirma que no hay fallback a "robbyrussell" sin `ZSH_THEME` seteado).
+- https://github.com/Psychotoxical/psysonic (repo real, incluido su
+  `flake.nix`, verificado antes de agregarlo como input).
+- https://github.com/Aloxaf/fzf-tab (README real — orden exigido de carga
+  relativo a `compinit`/`zsh-autosuggestions`).
+- `modules/programs/zsh/default.nix` y `modules/programs/zsh/plugins/
+  default.nix` real de home-manager (rev
+  `7566825d4652a1b885bd4ce65bd9e8def432fec9`) — `mkOrder` reales de
+  `autosuggestion.enable` (700), compinit de oh-my-zsh (800) y
+  `programs.zsh.plugins` genérico (900), que motivaron sourcear
+  zsh-autosuggestions a mano en vez de con la opción nativa.

@@ -43,9 +43,20 @@
   # Binary cache oficial de Noctalia -- sin esto, cada rebuild compila
   # Noctalia desde fuente en vez de bajar el binario prearmado
   # (docs.noctalia.dev/v5/getting-started/nixos).
-  nix.settings.extra-substituters = [ "https://noctalia.cachix.org" ];
+  #
+  # Binary cache oficial de Psysonic (nixos-install.md del repo real, no
+  # nixpkgs) -- sin esto, cada rebuild compila el frontend (npm) y el
+  # binario Tauri (Rust) desde cero en vez de bajarlos ya armados. La build
+  # que disparó este agregado (primer switch tras el cambio Feishin →
+  # Psysonic) ya venía compilando en local antes de que esto se agregara --
+  # no la acelera retroactivamente, pero sí los rebuilds futuros.
+  nix.settings.extra-substituters = [
+    "https://noctalia.cachix.org"
+    "https://psysonic.cachix.org"
+  ];
   nix.settings.extra-trusted-public-keys = [
     "noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4="
+    "psysonic.cachix.org-1:M9cQyQ7tgvUWOQ5Pyt8ozlMoPLtOZir6MfRuTH9/VYA="
   ];
 
   environment.systemPackages = with pkgs; [

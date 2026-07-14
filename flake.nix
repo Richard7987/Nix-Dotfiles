@@ -24,6 +24,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    psysonic = {
+      url = "github:Psychotoxical/psysonic";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Wallpapers estilo Gruvbox (paquete Nix real, no archivos sueltos —
     # ver home/ale/home.nix para cómo se instala vía home.file).
     gruvbox-wallpapers = {
@@ -40,6 +45,7 @@
     , noctalia-greeter
     , zen-browser
     , gruvbox-wallpapers
+    , psysonic
     , ...
     }@inputs:
     let
