@@ -152,6 +152,12 @@
         gpgconf --launch gpg-agent
         gpg-connect-agent updatestartuptty /bye >/dev/null 2>&1
       }
+
+      # pfetch al final: después de p10k (ya cargado arriba) para no
+      # imprimir nada antes de que el instant prompt se muestre -- si igual
+      # sale una advertencia de "console output during initialization" (el
+      # wizard eligió modo Verbose), es solo informativa, no rompe nada.
+      pfetch
     '';
   };
 
@@ -190,5 +196,6 @@
     (callPackage ../../pkgs/librepods.nix { })
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
+    pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
   ];
 }
