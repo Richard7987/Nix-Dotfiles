@@ -253,6 +253,10 @@
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
     fzf # binario que fzf-tab invoca para el menú interactivo del Tab (ver programs.zsh.plugins)
+    weechat # cliente IRC de terminal -- sin módulo declarativo en home-manager
+      # (no hay `programs.weechat`, se confirmó buscando en el source real del
+      # input), así que la config de plugins/scripts queda a mano dentro de
+      # weechat (`/script install ...`), no versionada en este repo.
     gpu-screen-recorder # dependencia del plugin oficial "screen_recorder" de Noctalia
       # (noctalia-dev/official-plugins) -- el plugin solo hace de wrapper/IPC,
       # busca este binario en PATH. El derivation de nixpkgs ya wrappea

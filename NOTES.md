@@ -1188,6 +1188,41 @@ bloquear la sesión (pantalla de bloqueo propia de Noctalia, ver
 mismo archivo). Cambio autocontenido, no requiere tocar `modules/
 desktop.nix` ni ningún paquete nuevo.
 
+## weechat (2026-07-16)
+
+Agregado a `home.packages` en `home/ale/home.nix`, junto al resto de
+paquetes CLI de terminal (`fzf`, `pfetch`). Petición del usuario tal cual
+("nix-shell -p weechat ... o agrégalo a tu flake de dotfiles como paquete
+normal"): un cliente IRC de terminal, sin ningún componente gráfico ni de
+sistema que declarar.
+
+- **Sin módulo declarativo en home-manager.** Verificado buscando
+  `weechat` en el source real del input `home-manager` (rev
+  `7566825d4652a1b885bd4ce65bd9e8def432fec9`, resuelto vía
+  `builtins.getFlake "path:/nixdots"` para obtener el store path exacto del
+  input pineado en `flake.lock`) — no hay ningún `modules/programs/
+  weechat.nix` ni mención alguna del paquete en todo el árbol. A diferencia
+  de `programs.git`/`programs.zsh`, no hay opciones tipadas para
+  plugins/scripts/servers de WeeChat; toda esa configuración vive dentro
+  del propio WeeChat en runtime (`/script install ...`, `/server add ...`),
+  no versionada en este repo. Si en el futuro se quiere declarar servers o
+  scripts de forma reproducible, la vía sería `xdg.configFile` apuntando a
+  `~/.config/weechat/*.conf` a mano (mismo patrón que otras apps sin
+  módulo dedicado), no una opción nativa.
+- **Paquete confirmado en el nixpkgs real** (mismo pin que resuelve el
+  resto del repo): `pkgs.weechat.meta.description` evaluó a *"Fast, light
+  and extensible chat client"` sin error.
+- **Validado con `nix eval` real** (mismo método que las rondas
+  #10/#11): `home-manager.users.ale.home.packages` incluye
+  `weechat-bin-env` (nombre del derivation wrapper de WeeChat) tras el
+  cambio, y `config.system.build.toplevel.drvPath` del sistema completo
+  sigue resolviendo sin error con el paquete agregado.
+- No hace falta `sudo nixos-rebuild switch` para *probar* WeeChat antes de
+  aplicarlo permanentemente — `nix-shell -p weechat` (como sugirió el
+  usuario) lo prueba sin tocar la config declarativa. El cambio en el repo
+  es para tenerlo instalado de forma permanente sin depender de acordarse
+  del `nix-shell` cada vez.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/

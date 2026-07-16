@@ -36,6 +36,10 @@ Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://d
   `p10k configure` en `home/ale/p10k.zsh`).
 - **Cursor** Bibata-Modern-Amber vía `home.pointerCursor` (Hyprland cae a su
   logo propio sin esto).
+- **WeeChat** (`home/ale/home.nix`) — cliente IRC de terminal, paquete
+  simple (sin módulo `programs.weechat` en home-manager); config de
+  plugins/servers se hace desde dentro del propio WeeChat, no versionada
+  en este repo. Ver `NOTES.md` (2026-07-16).
 
 ## Antes del primer `nixos-rebuild switch`
 
