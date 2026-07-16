@@ -113,10 +113,11 @@ sudo nixos-rebuild switch --flake .#ale
   El exit node se fija solo después de esto vía el servicio
   `tailscale-exit-node` — a diferencia de FreeBSD, aquí no depende de ningún
   driver wifi con fallos intermitentes.
-- **✅ Noctalia** — los atajos `mainMod+Space` / `+S` / `+comma` ya están
-  declarados en `hyprland.lua` con el comando IPC real (`noctalia msg
-  panel-toggle ...` / `settings-toggle`), confirmado contra la doc oficial.
-  Ya no es "revisa si funciona por su cuenta" — está resuelto explícito.
+- **✅ Noctalia** — los atajos `mainMod+Space` / `+S` / `+comma` / `+L` ya
+  están declarados en `hyprland.lua` con el comando IPC real (`noctalia msg
+  panel-toggle ...` / `settings-toggle` / `session lock`), confirmado
+  contra la doc oficial. Ya no es "revisa si funciona por su cuenta" —
+  está resuelto explícito.
 - **✅ LibrePods (AirPods)** — ya no es manual. No hay paquete Nix oficial ni
   release de Linux en GitHub (el binario real vive en la rama `linux/rust`
   de una PR sin mergear, kavishdevar/librepods#241, sin releases publicados),

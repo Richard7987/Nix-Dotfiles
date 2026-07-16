@@ -1123,12 +1123,46 @@ github.com directo** (a pesar de que la primera pregunta del usuario sobre
 esquema `ssh://` de `got` implementa el mismo protocolo de empaquetado de
 Git (`git-upload-pack`/`git-receive-pack`) que usa cualquier cliente Git
 por SSH, no algo exclusivo de GitHub -- cualquier servidor Git estándar
-(Gitea/Forgejo/gitolite/etc.) debería aceptarlo igual. **No probado en
-vivo contra este servidor todavía** (no se corrió `got send` de verdad,
-sería la primera confirmación real); pasar el remoto como se dio arriba,
-sin pasar por un nombre `origin` de `got.conf` (que no existe en este
-repo, solo el `.git/config` de `git`, y no está confirmado que `got` lo
-lea).
+(Gitea/Forgejo/gitolite/etc.) debería aceptarlo igual.
+
+**Probado en vivo, y falló:** tanto `got send` como `got fetch` (de
+solo lectura, sin efecto en el servidor) devuelven el mismo error contra
+el remoto real -- `remote repository not found` -- con la misma URL que
+`git push`/`git fetch` usan sin problema contra ese mismo servidor.
+Consistente entre los dos subcomandos, no es al azar. Hipótesis más
+probable (no confirmada, requeriría acceso al servidor): negociación de
+protocolo Git v2 por SSH (`GIT_PROTOCOL=version=2` vía `SetEnv`/
+`AcceptEnv` de ssh) que `got` sí manda y que el servidor (¿Gitea/Forgejo
+más viejo, o gitolite/git-shell plano?) no maneja bien, cayendo a un
+"repo no encontrado" genérico en vez de un error de protocolo claro. No
+investigado más a fondo porque requiere debug del lado del servidor, fuera
+de esta máquina.
+
+**Solución aplicada:** el commit hecho con `got commit` ya vive en el
+mismo `.git` real (`repository-path` de `got checkout` era
+`/nixdots/.git` directo, no una copia) -- `got` incluso movió
+`refs/heads/main` local a ese commit. Solo faltaba subirlo, y para eso
+sirve `git push` normal sin problema (es un commit de Git real y válido,
+`got` no usa un formato distinto). Antes de pushear hizo falta
+`git add` de los 3 archivos tocados para que el índice de `git` (que
+`got commit` no toca -- tiene su propio índice en `.got/file-index`)
+dejara de mostrar diffs falsos contra el HEAD ya movido.
+
+## Atajo de bloqueo de pantalla, `mainMod+L` (2026-07-16)
+
+Agregado en `home/ale/hyprland.lua` junto a los otros atajos IPC de
+Noctalia (`mainMod+Space`/`+S`/`+comma`, ronda "Auditoría exhaustiva #12"):
+
+```lua
+hl.bind(mainMod .. "+L", hl.dsp.exec_cmd(noctaliaMsg .. "session lock"))
+```
+
+Mismo patrón que los atajos ya existentes (`noctalia msg <comando>` vía
+`hl.dsp.exec_cmd`), `session lock` es el comando IPC real de Noctalia para
+bloquear la sesión (pantalla de bloqueo propia de Noctalia, ver
+`src/shell/lockscreen/` mencionado en la ronda de auditoría #12 de este
+mismo archivo). Cambio autocontenido, no requiere tocar `modules/
+desktop.nix` ni ningún paquete nuevo.
 
 ## Referencias usadas
 

@@ -110,6 +110,7 @@ local noctaliaMsg = "noctalia msg "
 hl.bind(mainMod .. "+Space", hl.dsp.exec_cmd(noctaliaMsg .. "panel-toggle launcher"))
 hl.bind(mainMod .. "+S", hl.dsp.exec_cmd(noctaliaMsg .. "panel-toggle control-center"))
 hl.bind(mainMod .. "+comma", hl.dsp.exec_cmd(noctaliaMsg .. "settings-toggle"))
+hl.bind(mainMod .. "+L", hl.dsp.exec_cmd(noctaliaMsg .. "session lock"))
 
 -- --- Navegación de foco ---
 hl.bind(mainMod .. "+Left", hl.dsp.focus({ direction = "left" }))
