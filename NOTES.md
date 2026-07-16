@@ -1125,28 +1125,52 @@ Git (`git-upload-pack`/`git-receive-pack`) que usa cualquier cliente Git
 por SSH, no algo exclusivo de GitHub -- cualquier servidor Git estándar
 (Gitea/Forgejo/gitolite/etc.) debería aceptarlo igual.
 
-**Probado en vivo, y falló:** tanto `got send` como `got fetch` (de
-solo lectura, sin efecto en el servidor) devuelven el mismo error contra
-el remoto real -- `remote repository not found` -- con la misma URL que
-`git push`/`git fetch` usan sin problema contra ese mismo servidor.
-Consistente entre los dos subcomandos, no es al azar. Hipótesis más
-probable (no confirmada, requeriría acceso al servidor): negociación de
-protocolo Git v2 por SSH (`GIT_PROTOCOL=version=2` vía `SetEnv`/
-`AcceptEnv` de ssh) que `got` sí manda y que el servidor (¿Gitea/Forgejo
-más viejo, o gitolite/git-shell plano?) no maneja bien, cayendo a un
-"repo no encontrado" genérico en vez de un error de protocolo claro. No
-investigado más a fondo porque requiere debug del lado del servidor, fuera
-de esta máquina.
+**Primer intento, falló -- pero la causa real NO fue el servidor.**
+`got send`/`got fetch` con la URL completa
+(`ssh://git@pcale.tail32b955.ts.net:2222/Ale/Nix-Dotfiles.git`) como
+argumento posicional devolvían `remote repository not found` en los dos.
+La hipótesis inicial (protocolo Git v2 por SSH que el servidor no
+soportaría) quedó descartada al revisar los logs de Forgejo del lado del
+servidor (sesión de Claude Code corriendo en `pcale`, la misma máquina que
+aloja Forgejo): **cero intentos de conexión SSH** de `got`, ni exitosos
+ni rechazados, mientras que los dos `git push` sí quedaron registrados con
+`Accepted publickey` + `git-receive-pack ... 200 OK`. Es decir, `got`
+nunca llegó a marcar ni siquiera el handshake SSH -- confirma que el
+problema era 100% del lado del cliente, no del servidor.
 
-**Solución aplicada:** el commit hecho con `got commit` ya vive en el
-mismo `.git` real (`repository-path` de `got checkout` era
-`/nixdots/.git` directo, no una copia) -- `got` incluso movió
-`refs/heads/main` local a ese commit. Solo faltaba subirlo, y para eso
-sirve `git push` normal sin problema (es un commit de Git real y válido,
-`got` no usa un formato distinto). Antes de pushear hizo falta
-`git add` de los 3 archivos tocados para que el índice de `git` (que
-`got commit` no toca -- tiene su propio índice en `.got/file-index`)
-dejara de mostrar diffs falsos contra el HEAD ya movido.
+Confirmado con `strace -f -e trace=execve,connect` sobre `got fetch`:
+pasando la **URL completa** como argumento, `got` corre
+`got-read-gitconfig /nixdots/.git/config` y falla ahí mismo, **sin
+ejecutar `ssh` ni un solo `connect()`** -- el error salta en el parseo
+del argumento posicional, antes de intentar red. Pasando en cambio el
+**nombre del remoto ya definido en `.git/config`** (`got fetch -v
+origin`), el trace muestra a `got` resolviendo ese remoto vía
+`got-read-gitconfig`, ejecutando de verdad
+`/nix/store/.../openssh-10.3p1/bin/ssh -p 2222 -- git@pcale.tail32b955.ts.net
+git-upload-pack '/Ale/Nix-Dotfiles.git'`, conectando por `AF_INET` a la IP
+de Tailscale (`100.85.17.100:2222`), usando el socket SSH de
+`gpg-agent`/YubiKey (`/run/user/1000/gnupg/S.gpg-agent.ssh`) para
+autenticar, y terminando con `Already up-to-date` -- éxito completo.
+
+**Conclusión real:** `got` sí lee los remotos de `.git/config` de `git`
+(contra lo que se había dejado como "no confirmado" más arriba), pero
+**no acepta una URL `ssh://` cruda como argumento posicional de la misma
+forma que `git`** -- hay que pasarle el **nombre del remoto** (`origin`),
+no la URL completa. El comando correcto para pushear con `got` en este
+repo es `got send origin`, no `got send ssh://...`. SSH, Tailscale,
+`gpg-agent`/YubiKey y el servidor Forgejo funcionan todos correctamente
+con `got` -- el error de la ronda anterior era un argumento mal armado de
+mi parte, no una incompatibilidad real.
+
+**Cómo se subió el commit finalmente:** dado que el error se detectó y
+corrigió después de ya haber resuelto el push con `git push` normal (el
+commit de `got commit` vive en el mismo `.git` real -- `repository-path`
+de `got checkout` era `/nixdots/.git` directo, no una copia -- y `got`
+ya había movido `refs/heads/main` local a ese commit), no hizo falta
+repetir el `got send`. Antes del `git push` hizo falta `git add` de los
+3 archivos tocados para que el índice de `git` (que `got commit` no toca
+-- tiene su propio índice en `.got/file-index`) dejara de mostrar diffs
+falsos contra el HEAD ya movido.
 
 ## Atajo de bloqueo de pantalla, `mainMod+L` (2026-07-16)
 
@@ -1230,3 +1254,11 @@ desktop.nix` ni ningún paquete nuevo.
   firma SSH de tags). El `usage:` real del binario 0.126 instalado
   (`got checkout -h`, etc.) se usó para corregir un resumen automático de
   doc que asumía incorrectamente una opción `-f` inexistente.
+- `strace -f -e trace=execve,connect` real sobre `got fetch`/`got send` —
+  confirmó que pasar la URL completa como argumento posicional nunca
+  llega a ejecutar `ssh(1)` (falla antes, en el parseo), mientras que
+  pasar el nombre del remoto (`origin`) sí lo hace y completa el fetch
+  con éxito. Y logs de Forgejo del lado del servidor (revisados desde una
+  sesión de Claude Code corriendo en `pcale`, la misma máquina que aloja
+  Forgejo) — cero intentos de conexión de `got`, descartando que el
+  servidor fuera la causa.
