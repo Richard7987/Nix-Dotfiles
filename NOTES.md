@@ -933,6 +933,110 @@ autosuggestions (con el bug de orden evitado, ver arriba). Todo aplicado con
 éxito en la máquina real (`nixos-rebuild switch` confirmado por el usuario:
 `Done.`, sin errores).
 
+## Revisión de logs del sistema: Bluetooth (diagnosticado, no accionable) + segfault de noctalia-greeter en cada arranque + carpetas XDG (2026-07-16)
+
+### Auditoría de `journalctl` (a pedido del usuario: "revisa los logs a ver cualquier error")
+
+Revisados `journalctl -p 3 -xb`, `--failed` (sistema y usuario), OOM,
+filesystem/disco, y `coredumpctl list` de los últimos 3 arranques. Sin
+servicios systemd fallidos, sin OOM kills reales (el ciclo "OOM killer
+disabled/enabled" es de suspend/hibernate, no de memoria agotada), sin
+errores de disco (`ata5: SATA link down` es un puerto SATA vacío, benigno).
+Dos hallazgos reales:
+
+**Bluetooth — diagnosticado, sin fix de config posible.** Tres mensajes
+repetidos en cada arranque/resume:
+
+- `BAP requires ISO Socket which is not enabled` — el adaptador de esta
+  máquina (Intel AC9560, integrado con el WiFi) es de 2018, anterior a
+  Bluetooth 5.2. LE Audio/canales ISO (lo que necesita el perfil BAP) es una
+  limitación de firmware/hardware del controlador, no algo que un flag de
+  NixOS o de `bluetoothd` pueda habilitar. No es efecto del flag `-E`
+  (experimental) que ya tenemos por LibrePods (ver más arriba, "LibrePods
+  (AirPods)") — BlueZ prueba el perfil BAP en la inicialización del adaptador
+  sin importar `-E`.
+- `Unable to get Hands-Free Voice gateway SDP record: Host is down` y
+  `a2dp-sink profile connect failed for 14:28:76:C3:CF:FF: Protocol not
+  available` — confirmado con `bluetoothctl info 14:28:76:C3:CF:FF` que es
+  el MAC de los AirPods Pro del usuario (`Paired: yes`, `Bonded: yes`,
+  `Connected: no` en el momento de la revisión). Es `bluetoothd`
+  reintentando reconectar a un dispositivo emparejado que está apagado o
+  fuera de rango -- comportamiento esperado, no un bug. Búsqueda en
+  `github.com/bluez/bluez/issues` encontró issues con el mismo texto exacto
+  (#348, #351, #1309, #1610) pero sin resolución clara documentada en los
+  hilos -- no hay parche conocido que aplicar, y dado que
+  `bluez5.codecs`/el flag `-E` en `modules/desktop.nix` son el resultado de
+  13 rondas de diagnóstico en vivo (ronda #13, audio cortado con los
+  AirPods), **decidido no tocar esa config a ciegas** sin evidencia de que
+  el cambio resuelva algo real -- el riesgo de re-romper el audio ya
+  estabilizado supera el beneficio de silenciar un log.
+
+**noctalia-greeter: segfault en el compositor al salir, en el 100% de los
+arranques registrados.** Encontrado en `journalctl -k` (`noctalia-greete[PID]:
+segfault ... in libwlroots-0.20.so`) y confirmado con `coredumpctl list`
+(4/4 arranques con coredump, mismo binario:
+`noctalia-greeter-compositor`, señal SIGSEGV). Contexto exacto del crash
+(`journalctl -b -1`, alrededor del segfault):
+
+```
+[info] session start confirmed, exiting greeter
+[info] shutdown complete
+kernel: noctalia-greete[PID]: segfault at ... in libwlroots-0.20.so
+```
+
+El crash pasa **después** de que el greeter ya reportó `shutdown complete`
+y entregó la sesión a Hyprland -- es un segfault en la limpieza/destructores
+del proceso ya terminado, no algo que bloquee el login (por eso nunca se
+notó "a simple vista"). Sin backtrace legible (`coredumpctl` reporta
+`COREFILE inaccessible`, sin símbolos de debug en el store).
+
+Revisado el historial real de `github.com/noctalia-dev/noctalia-greeter`:
+el pin en `flake.lock` (`fffc583a`, 12 jul) estaba un día atrasado respecto
+a `main` (`b0735981`, 13 jul). Ningún commit en el medio menciona
+explícitamente "segfault"/"crash"/"SIGSEGV" (el más cercano,
+`fix(compositor): prevent layout operations during shutdown`, es de antes
+del pin actual, así que ya estaba incluido y no evitó el crash). Tampoco
+hay issues abiertos con "segfault" en el tracker del proyecto. **No hay
+fix confirmado upstream** -- la actualización del input
+(`nix flake lock --update-input noctalia-greeter`) se hizo como intento
+razonable (trae 4 commits nuevos, incluye fixes de compositor/input), no
+como solución verificada.
+
+Build validado con `nix build .#nixosConfigurations.ale.config.system.build.toplevel`
+(sin sudo) antes de aplicar. Aplicado con
+`sudo nixos-rebuild switch --flake /nixdots#ale` (corrido por el usuario,
+`Done.` sin errores) -- pero `greetd.service` **no se reinició** (systemd
+lo excluye de los reinicios en caliente de un `switch`, para no cortar la
+sesión gráfica activa), así que el binario nuevo de `noctalia-greeter`
+recién se usa en el próximo arranque real. **Pendiente: confirmar tras un
+reinicio real si el segfault sigue apareciendo** (`coredumpctl
+list --since=today` después de reiniciar). Si sigue, hace falta reportarlo
+upstream con un backtrace real (requeriría un build con símbolos de debug,
+no intentado todavía).
+
+### Carpetas XDG estándar
+
+A pedido del usuario ("solo tengo Pictures y Downloads, no recuerdo qué
+más"): agregado `xdg.userDirs` en `home/ale/home.nix` (antes no estaba
+declarado -- las carpetas que existían se habían creado a mano, sin pasar
+por `xdg-user-dirs-update` ni estar en el repo). Nombres en inglés a
+propósito (`Desktop`/`Documents`/`Music`/etc., no `Escritorio`/`Documentos`)
+para no generar carpetas duplicadas junto a las `Pictures`/`Videos`/
+`Downloads` en inglés que ya existían con contenido real, a pesar de que el
+locale de la máquina es `es_MX.UTF-8`.
+
+De paso se destapó una carpeta `Descargas` (con "s", duplicado en español,
+vacía) que ya no existe al momento de aplicar el cambio -- el usuario debe
+haberla borrado por su cuenta entre la revisión de logs y este cambio; no
+hizo falta lidiar con un merge de contenido.
+
+Tras aplicar (`nixos-rebuild switch`, confirmado por el usuario), se generó
+`~/.config/user-dirs.dirs` con las 8 carpetas declaradas, más una
+`XDG_PROJECTS_DIR="/home/ale/Projects"` que **no** se declaró en este
+cambio -- viene de algún módulo ya importado (`inputs.noctalia.homeModules.
+default` es sospechoso, no confirmado con `nix eval` cuál exactamente).
+Documentado acá para no sorprenderse de nuevo si aparece en otro contexto.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
@@ -984,3 +1088,12 @@ autosuggestions (con el bug de orden evitado, ver arriba). Todo aplicado con
   `autosuggestion.enable` (700), compinit de oh-my-zsh (800) y
   `programs.zsh.plugins` genérico (900), que motivaron sourcear
   zsh-autosuggestions a mano en vez de con la opción nativa.
+- https://github.com/noctalia-dev/noctalia-greeter/commits/main (historial
+  real de commits — confirmó que el pin en `flake.lock` estaba atrasado y
+  que ningún commit menciona explícitamente el segfault de salida).
+- https://github.com/bluez/bluez/issues (búsqueda de "a2dp-sink profile
+  connect failed" + "Protocol not available" — issues #348, #351, #1309,
+  #1610, sin resolución clara documentada).
+- `bluetoothctl info <MAC>` real en la máquina — confirmó que el MAC de los
+  mensajes de reconexión en el log es el de los AirPods Pro del usuario,
+  no un dispositivo desconocido.

@@ -13,6 +13,25 @@
 
   programs.home-manager.enable = true;
 
+  # --- Carpetas XDG estándar ---
+  # Antes solo existían Pictures/Videos/Downloads creadas a mano (más una
+  # "Descargas" duplicada, probablemente de una app que leyó el locale
+  # es_MX). Declararlas acá evita que queden huérfanas fuera del repo y
+  # que se vuelvan a duplicar. Nombres en inglés a propósito, para no
+  # romper Pictures/Videos/Downloads que ya existen y tienen contenido.
+  xdg.userDirs = {
+    enable = true;
+    createDirectories = true;
+    desktop = "${config.home.homeDirectory}/Desktop";
+    documents = "${config.home.homeDirectory}/Documents";
+    download = "${config.home.homeDirectory}/Downloads";
+    music = "${config.home.homeDirectory}/Music";
+    pictures = "${config.home.homeDirectory}/Pictures";
+    publicShare = "${config.home.homeDirectory}/Public";
+    templates = "${config.home.homeDirectory}/Templates";
+    videos = "${config.home.homeDirectory}/Videos";
+  };
+
   # --- Cursor ---
   # Sin esto, Hyprland cae a su cursor propio por defecto (el logo de
   # Hyprland) -- no hay ningún theme de cursor instalado/declarado.
