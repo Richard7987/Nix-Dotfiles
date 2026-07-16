@@ -1037,6 +1037,99 @@ cambio -- viene de algún módulo ya importado (`inputs.noctalia.homeModules.
 default` es sospechoso, no confirmado con `nix eval` cuál exactamente).
 Documentado acá para no sorprenderse de nuevo si aparece en otro contexto.
 
+## got (Game of Trees) (2026-07-16)
+
+A pedido del usuario: agregado `got` (`pkgs.got`, confirmado real contra
+nixpkgs con `nix eval nixpkgs#got.pname/.version` antes de agregarlo --
+versión 0.126) a `environment.systemPackages` en `modules/desktop.nix`, como
+alternativa opcional a `git` para el mismo repo.
+
+### Investigación previa a agregarlo (a pedido del usuario, antes de tocar código)
+
+Contra el manual real de `gameoftrees.org` (`got.1`, `got.conf.5`), no de
+memoria:
+
+- **Compatibilidad de repo:** `got` opera sobre el mismo formato de repo
+  Git "bare" en disco -- no migra ni convierte nada, `git` y `got` pueden
+  coexistir sobre el mismo repo sin pisarse.
+- **SSH:** `got clone`/`fetch`/`send` soportan `ssh://usuario@host`
+  invocando `ssh(1)` del sistema (con `ssh-agent`), igual que `git` -- la
+  autenticación SSH ya configurada vía `gpg-agent` + YubiKey
+  (`services.gpg-agent.enableSshSupport`, ver sección YubiKey/GPG) no
+  cambia en nada.
+- **Firma:** `got commit` **no tiene ninguna opción de firma** (ni GPG ni
+  SSH) -- confirmado en el synopsis real (`[-CNnS]`, la `-S` ahí es para
+  symlinks fuera del árbol versionado, no para firmar). Solo `got tag -S`
+  firma, y únicamente con firma **SSH** (`ssh-keygen -Y sign`/`ssh-agent`),
+  nunca GPG. Como el repo ya tiene commits firmados con GPG vía la YubiKey
+  (verificados con `git log --show-signature`, ver sección YubiKey/GPG),
+  la conclusión fue: **no reemplazar `git commit -S` por `got commit`** --
+  ambas herramientas conviven sobre el mismo repo, se puede seguir
+  commiteando y firmando con `git` y usar `got` para lo demás (log, status,
+  diff, fetch/send) si se prefiere su UX.
+
+### `got checkout` requiere un *work tree* propio y vacío -- no funciona "en el lugar"
+
+Verificado en vivo (no solo con el manual, que en un resumen automático
+inicial sugería incorrectamente que existía una opción `-f` para forzar el
+checkout dentro de un directorio no vacío -- **no existe tal opción en la
+0.126 real**, confirmado con el `usage:` real del binario:
+`checkout [-Eq] [-b branch] [-c commit] [-p path-prefix] repository-path
+[work-tree-path]`, sin `-f`). Un *work tree* de `got` es una estructura
+propia (metadata en `.got/`: `base-commit`, `file-index`, `head-ref`,
+`repository`, `uuid`) completamente distinta del checkout que deja
+`git clone` -- **no se puede simplemente empezar a correr `got status`/
+`got commit` adentro de `/nixdots`** (que ya tiene `.git/` + archivos de
+`git clone`), porque `got checkout` exige que `work-tree-path` esté vacío.
+
+Probado en un repo descartable en el scratchpad antes de intentar nada
+contra el repo real, justamente para no arriesgar los cambios sin
+commitear que ya había en `/nixdots` (`home/ale/hyprland.lua`, un cambio
+del usuario ajeno a esta tarea) -- confirmó el error `invalid option -- 'f'`
+en vez de asumir el comportamiento de memoria/de un resumen de doc.
+
+### Flujo real para probar `got commit`/`got send` una vez sobre este repo
+
+Dado lo anterior, para commitear con `got` hace falta un *work tree*
+separado (reutiliza los mismos objetos de `/nixdots/.git`, así que no
+duplica historia ni diverge):
+
+```sh
+got checkout -b main /nixdots/.git ~/nixdots-got   # work-tree-path debe estar vacío/no existir
+cp /nixdots/modules/desktop.nix ~/nixdots-got/modules/desktop.nix
+cp /nixdots/README.md /nixdots/NOTES.md ~/nixdots-got/
+cd ~/nixdots-got
+got status
+got commit -m "..."
+got send ssh://git@pcale.tail32b955.ts.net:2222/Ale/Nix-Dotfiles.git
+```
+
+Tras el `got send`, hace falta sincronizar `/nixdots` (el checkout de
+`git` real que usa `nixos-rebuild --flake /nixdots#ale`) de vuelta, sin
+tocar el cambio ajeno pendiente en `hyprland.lua`:
+
+```sh
+cd /nixdots
+git fetch origin
+git checkout origin/main -- modules/desktop.nix README.md NOTES.md  # objetivo, no toca hyprland.lua
+git merge --ff-only origin/main
+```
+
+**Remoto real confirmado** (`git remote -v` en `/nixdots`): `origin` es
+`ssh://git@pcale.tail32b955.ts.net:2222/Ale/Nix-Dotfiles.git` -- un
+servidor Git propio expuesto por Tailscale (puerto 2222), **no
+github.com directo** (a pesar de que la primera pregunta del usuario sobre
+`got` hablaba de "push a GitHub"). No debería ser un problema real: el
+esquema `ssh://` de `got` implementa el mismo protocolo de empaquetado de
+Git (`git-upload-pack`/`git-receive-pack`) que usa cualquier cliente Git
+por SSH, no algo exclusivo de GitHub -- cualquier servidor Git estándar
+(Gitea/Forgejo/gitolite/etc.) debería aceptarlo igual. **No probado en
+vivo contra este servidor todavía** (no se corrió `got send` de verdad,
+sería la primera confirmación real); pasar el remoto como se dio arriba,
+sin pasar por un nombre `origin` de `got.conf` (que no existe en este
+repo, solo el `.git/config` de `git`, y no está confirmado que `got` lo
+lea).
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
@@ -1097,3 +1190,9 @@ Documentado acá para no sorprenderse de nuevo si aparece en otro contexto.
 - `bluetoothctl info <MAC>` real en la máquina — confirmó que el MAC de los
   mensajes de reconexión en el log es el de los AirPods Pro del usuario,
   no un dispositivo desconocido.
+- https://gameoftrees.org/got.1.html, https://gameoftrees.org/got.conf.5.html,
+  https://gameoftrees.org/got-worktree.5.html — manual real de `got`
+  (opciones de `checkout`/`commit`/`send`/`fetch`, formato de work tree,
+  firma SSH de tags). El `usage:` real del binario 0.126 instalado
+  (`got checkout -h`, etc.) se usó para corregir un resumen automático de
+  doc que asumía incorrectamente una opción `-f` inexistente.

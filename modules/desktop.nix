@@ -130,6 +130,11 @@
       # cliente de música self-hosted (Navidrome), reemplaza a feishin --
       # empaquetado vía su propio flake.nix (no está en nixpkgs). Hace
       # falta apuntarlo a un servidor la primera vez que se abre.
+    got  # VCS alternativo a git, mismo formato de repo bare en disco --
+         # coexiste con git en el mismo repo (clone/fetch/send por ssh://,
+         # reusa ssh-agent). "got commit" NO soporta firma GPG ni SSH (solo
+         # "got tag -S" firma, y solo con SSH) -- para mantener los commits
+         # firmados con la YubiKey seguir usando "git commit -S".
   ];
 
   # Necesario para que QT_QPA_PLATFORMTHEME=kde (de abajo) resuelva al plugin

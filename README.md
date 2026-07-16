@@ -22,6 +22,14 @@ Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://d
 - **Carpetas XDG estándar** (`Desktop`, `Documents`, `Downloads`, `Music`,
   `Pictures`, `Public`, `Templates`, `Videos`) declaradas vía
   `xdg.userDirs` en `home/ale/home.nix`, en vez de creadas a mano.
+- **got** (Game of Trees, `modules/desktop.nix`) — VCS alternativo opcional
+  para trabajar con este mismo repo, en paralelo a `git`. Mismo formato de
+  repo Git en disco, coexisten sin problema. **`got commit`/`got tag` no
+  soportan firma GPG** (`got tag -S` firma, pero solo con SSH) -- los
+  commits firmados con la YubiKey siguen haciéndose con `git commit -S`.
+  Ver sección "got (Game of Trees)" en `NOTES.md` (2026-07-16) para el
+  detalle de por qué no es un reemplazo 1:1 de `git` en este repo, y cómo
+  usarlo (requiere un *work tree* propio, separado del clone de `git`).
 - **Theming Qt** (Kleopatra, pinentry-qt) coherente con Noctalia vía
   `kdePackages.plasma-integration`/`breeze` + `QT_QPA_PLATFORMTHEME=kde`.
 - **Oh My Zsh + Powerlevel10k** (`home/ale/home.nix`, config generada con
