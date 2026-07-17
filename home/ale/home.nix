@@ -249,6 +249,7 @@
   home.packages = with pkgs; [
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
+    (callPackage ../../pkgs/nokkvi.nix { })
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
@@ -257,6 +258,14 @@
       # (no hay `programs.weechat`, se confirmó buscando en el source real del
       # input), así que la config de plugins/scripts queda a mano dentro de
       # weechat (`/script install ...`), no versionada en este repo.
+    jetbrains.idea # IntelliJ IDEA Ultimate -- paquete directo de nixpkgs, no
+      # Toolbox: Toolbox baja binarios fuera del store y se autoactualiza por
+      # su cuenta, no encaja con el modelo declarativo de este repo (mismo
+      # motivo por el que LibrePods se compila de fuente en vez de usar un
+      # AppImage, ver pkgs/librepods.nix). Requiere licencia/login JetBrains
+      # la primera vez que se abre. allowUnfree ya está en true a nivel
+      # sistema (hosts/ale/configuration.nix, por Nvidia/Steam) y
+      # useGlobalPkgs = true lo hereda acá, así que no hace falta nada extra.
     gpu-screen-recorder # dependencia del plugin oficial "screen_recorder" de Noctalia
       # (noctalia-dev/official-plugins) -- el plugin solo hace de wrapper/IPC,
       # busca este binario en PATH. El derivation de nixpkgs ya wrappea
