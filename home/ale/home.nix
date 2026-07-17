@@ -249,7 +249,6 @@
   home.packages = with pkgs; [
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
-    (callPackage ../../pkgs/nokkvi.nix { })
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)

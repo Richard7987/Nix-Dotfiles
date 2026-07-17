@@ -47,6 +47,25 @@
     wireplumber.enable = true;
   };
 
+  # Sin esto, el clock del grafo de PipeWire queda fijo en 48000 Hz sin
+  # margen (default de PipeWire: default.clock.allowed-rates vacío = una
+  # sola tasa) -- confirmado en vivo con `pw-metadata -n settings`. Con esto
+  # poblado, el grafo puede cambiar de tasa para matchear la nativa de un
+  # stream "bit-perfect" (ej. psysonic con álbumes hi-res, "audio stream
+  # opened at 192000 Hz (exact)" en sus logs) en vez de forzar resample.
+  #
+  # NO fue la causa del audio cortado que motivó esto -- esa fue una función
+  # de hi-res streaming propia de psysonic (bug/comportamiento de esa app,
+  # se resolvió desactivándola ahí). Este cambio queda solo porque sigue
+  # siendo una mejora real y correcta para el DAC hi-res (HiBy FC4) más allá
+  # de ese diagnóstico puntual.
+  services.pipewire.extraConfig.pipewire."92-clock-rates" = {
+    "context.properties" = {
+      "default.clock.rate" = 48000;
+      "default.clock.allowed-rates" = [ 44100 48000 88200 96000 176400 192000 ];
+    };
+  };
+
   # AVRCP "dummy player" -- necesario para que los controles de reproducción
   # (play/pause/skip) de los AirPods (vía LibrePods, ver home/ale/home.nix)
   # funcionen con pipewire/wireplumber. Documentado en linux/README.md de

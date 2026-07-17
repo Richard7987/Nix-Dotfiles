@@ -40,6 +40,17 @@ Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://d
   simple (sin módulo `programs.weechat` en home-manager); config de
   plugins/servers se hace desde dentro del propio WeeChat, no versionada
   en este repo. Ver `NOTES.md` (2026-07-16).
+- **IntelliJ IDEA Ultimate** (`jetbrains.idea`, directo de nixpkgs en
+  `home/ale/home.nix`) — no JetBrains Toolbox, no encaja con el modelo
+  declarativo del repo. Requiere login/licencia JetBrains la primera vez.
+- **PipeWire con `default.clock.allowed-rates` poblado**
+  (`modules/desktop.nix`) — sin esto el clock del grafo queda fijo en
+  48kHz sin margen (default de PipeWire), y clientes "bit-perfect" que
+  piden la tasa nativa de archivos hi-res (ej. FLAC 24-bit/192kHz) fuerzan
+  un resample silencioso. Ver "IntelliJ IDEA Ultimate, nokkvi, y audio
+  cortado en psysonic con álbumes hi-res" en `NOTES.md` (2026-07-16/17)
+  para el diagnóstico completo (incluye un bug real de Noctalia encontrado
+  en el camino, con patch armado y después revertido por no ser la causa).
 
 ## Antes del primer `nixos-rebuild switch`
 

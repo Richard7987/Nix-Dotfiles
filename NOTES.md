@@ -1223,6 +1223,107 @@ sistema que declarar.
   es para tenerlo instalado de forma permanente sin depender de acordarse
   del `nix-shell` cada vez.
 
+## IntelliJ IDEA Ultimate, nokkvi, y audio cortado en psysonic con álbumes hi-res (2026-07-16/17)
+
+**IntelliJ IDEA Ultimate.** `jetbrains.idea` directo de nixpkgs en
+`home.packages` (`home/ale/home.nix`), no JetBrains Toolbox — Toolbox baja
+binarios fuera del store y se autoactualiza por su cuenta, no encaja con el
+modelo declarativo de este repo (mismo motivo por el que LibrePods se
+compila de fuente en vez de depender de un AppImage). `allowUnfree` ya
+estaba en `true` a nivel sistema (`hosts/ale/configuration.nix`, por
+Nvidia/Steam), `home-manager.useGlobalPkgs = true` lo hereda. Requiere
+login/licencia JetBrains la primera vez que se abre.
+
+**nokkvi** (cliente nativo de Navidrome, Rust/Iced,
+github.com/f-o-o-g-s/nokkvi) — coexiste con `psysonic`, no lo reemplaza
+(decisión explícita del usuario). A diferencia de LibrePods, este proyecto
+sí tiene releases oficiales de Linux con binario prebuilt, pero su
+`Cargo.toml` pinea `iced` a un commit de la rama `master` upstream (no
+crates.io) — compilarlo con `buildRustPackage` hubiera dependido de un
+`outputHashes` frágil, roto en cada bump de esa fork. Se empaquetó en
+`pkgs/nokkvi.nix` bajando el binario oficial del release (`fetchurl` +
+`autoPatchelfHook`), verificando el `sha256` del tarball contra el
+`.sha256` que el propio proyecto publica junto a cada release. Runtime deps
+confirmadas con `readelf -d` real sobre el binario (fontconfig, freetype,
+alsa-lib, pipewire, y `stdenv.cc.cc.lib` para `libgcc_s.so.1`, que no la
+trae ningún paquete de arriba); `vulkan-loader`/`libxkbcommon`/`wayland`
+como `runtimeDependencies` porque iced/wgpu (mismo stack que LibrePods) los
+resuelven vía `dlopen` en runtime, no aparecen en `readelf -d`. Build
+verificado en vivo (`nix build` + `nokkvi --version`).
+
+**Removido el mismo día** (decisión del usuario, sin razón registrada en
+esta sesión) — `pkgs/nokkvi.nix` borrado y la línea sacada de
+`home.packages`. Queda el detalle de empaquetado de arriba como referencia
+real y ya verificada por si se reinstala más adelante (el patch de la
+release/hash/runtime deps sigue siendo válido salvo que haya salido una
+versión nueva).
+
+**Audio cortado en psysonic con álbumes hi-res (FLAC 24-bit/192kHz).**
+Reporte del usuario: 2 álbumes nuevos (Electric Light Orchestra "Discovery"
+y otro) sonaban cortados en psysonic, pero bien con otros clientes de
+Navidrome y bien con el resto de la biblioteca en el propio psysonic.
+Diagnóstico en varias rondas, con dos hallazgos reales confirmados en el
+camino y una causa final que terminó siendo otra:
+
+- **Hallazgo real #1 -- `default.clock.allowed-rates` de PipeWire vacío.**
+  `pw-metadata -n settings` mostraba `clock.allowed-rates=[48000]` (default
+  de PipeWire sin configurar: una sola tasa fija). Los logs de psysonic
+  (`psysonic --logs --tail 300`) mostraban `audio stream opened at 192000
+  Hz (exact)` para los álbumes hi-res -- psysonic tiene un modo
+  "bit-perfect" que intenta matchear la tasa nativa del archivo. Con el
+  clock fijo, PipeWire forzaba un resample 192kHz->48kHz por atrás. Se
+  agregó `services.pipewire.extraConfig.pipewire."92-clock-rates"` en
+  `modules/desktop.nix` con `default.clock.allowed-rates = [ 44100 48000
+  88200 96000 176400 192000 ]` -- **este cambio se mantuvo** porque sigue
+  siendo correcto para el DAC hi-res real de la máquina (HiBy FC4, USB,
+  confirmado con `cat /proc/asound/card1/stream0` que soporta hasta
+  768kHz), más allá de que no resultó ser la causa completa del corte.
+- **Hallazgo real #2 -- bug de Noctalia, stream de sonido de UI que nunca
+  se desconecta.** Con `wpctl status` se vio un stream activo permanente
+  llamado "Noctalia" (`node.name = noctalia-sound`, confirmado con
+  `pw-dump`) compitiendo por el mismo sink (HiBy FC4) incluso horas después
+  de haber sonado un solo efecto de UI (notificación, OSD de volumen).
+  Revisando el código fuente real del input (`src/pipewire/
+  sound_player.cpp`, `SoundPlayer::onDrained()`): marca el stream como
+  `finished` pero nunca llama a `pw_stream_disconnect()` -- el
+  `pw_stream_destroy()` recién corre en la PRÓXIMA vez que suena otro
+  efecto (`removeFinished()`, invocado al principio de `play()`). Mientras
+  ese stream siguiera conectado, PipeWire no cambiaba el clock del grafo
+  para servir a otro cliente. Se armó un patch real
+  (`pkgs/noctalia-sound-disconnect.patch`, con `pw_stream_disconnect()`
+  agregado a `onDrained()`) y un override de `programs.noctalia.package`
+  duplicado en **dos** módulos independientes (el de NixOS en
+  `modules/desktop.nix` y el de home-manager en `home/ale/home.nix`, cada
+  uno con su propia opción `programs.noctalia.package` -- el de
+  home-manager instala en `/etc/profiles/per-user/ale/bin`, que gana en
+  `$PATH` sobre `/run/current-system/sw/bin` del módulo de NixOS, así que
+  hacía falta el override en los dos lados o el binario sin parchear
+  ganaba igual). Patch compilado y verificado en vivo: el stream "Noctalia"
+  efectivamente dejó de quedar colgado en `wpctl status` tras aplicarlo.
+  **Este bug es real y sigue sin arreglar upstream** (no se reportó
+  todavía), pero el patch/override se **revirtió** de este repo (borrados
+  `pkgs/noctalia-sound-disconnect.patch` y `pkgs/noctalia-patched.nix`,
+  sacados los dos overrides) porque no era la causa del audio cortado --
+  ver siguiente punto. Si el sonido de UI colgado vuelve a molestar en el
+  futuro, el patch armado acá (buscar en el historial de git de este
+  archivo/repo, commit previo a la reversión) es un punto de partida real
+  y ya compilado una vez.
+- **Causa real.** Con los dos hallazgos de arriba aplicados, el corte
+  seguía. Revisando `psysonic --logs` en el momento exacto de la
+  reproducción aparecieron `[hi-res-blend] outgoing track not cached for
+  blend reopen` y `[audio] ranged dl error (attempt 1/3): error decoding
+  response body -- reconnecting`, ambos correlacionados con la apertura de
+  streams a 192kHz. Se descartó que fuera ancho de banda/wifi (LAN directa
+  por Tailscale a 13ms, sin relay DERP -- `tailscale ping` confirmó
+  conexión directa; señal wifi fuerte, 79%/-41dBm/1170Mbit; `ip -s link`
+  con drop rate insignificante, ~0.08%). La causa terminó siendo una
+  función propia de psysonic (streaming/blend "bit-perfect" para hi-res) --
+  el usuario la desactivó en la configuración de la app y el corte
+  desapareció por completo. No se llegó a encontrar el toggle exacto desde
+  esta sesión (el usuario lo hizo directo en la UI de psysonic) -- queda
+  pendiente documentar dónde vive esa opción si hace falta tocarla de nuevo
+  vía config declarativa.
+
 ## Referencias usadas
 
 - https://docs.noctalia.dev/v5/getting-started/nixos/
