@@ -257,6 +257,11 @@
       # (no hay `programs.weechat`, se confirmó buscando en el source real del
       # input), así que la config de plugins/scripts queda a mano dentro de
       # weechat (`/script install ...`), no versionada en este repo.
+    zola # generador de sitios estáticos. Ya estaba instalado de forma
+      # imperativa (`nix profile install nixpkgs#zola`, fuera de este repo,
+      # store path propio en el perfil de usuario) -- movido acá para que
+      # quede reproducible igual que el resto del sistema, en vez de
+      # depender de un estado que `nixos-rebuild` no toca ni versiona.
     jetbrains.idea # IntelliJ IDEA Ultimate -- paquete directo de nixpkgs, no
       # Toolbox: Toolbox baja binarios fuera del store y se autoactualiza por
       # su cuenta, no encaja con el modelo declarativo de este repo (mismo

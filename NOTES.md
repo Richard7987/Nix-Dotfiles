@@ -1439,3 +1439,22 @@ ambos a `environment.systemPackages` en `modules/desktop.nix`.
 - **Pendiente manual:** correr `sudo nixos-rebuild switch --flake
   /nixdots#ale` para aplicar (no lo corrí yo, ver política de acciones de
   sistema).
+- **Aplicado por el usuario, confirmado en vivo:** `which mpv loupe` resuelve
+  a `/run/current-system/sw/bin/`, `mpv --version` corre real (v0.41.0).
+
+## zola (2026-07-17)
+
+A pedido del usuario. Encontrado ya instalado, pero de forma **imperativa**
+(`nix profile list` mostró `zola` -- y de paso `nodejs`, sin tocar -- con
+store path propio en `/home/ale/.local/state/nix/profiles/profile`, fuera de
+este repo). Igual que con IntelliJ Toolbox/LibrePods AppImage (ver rondas
+anteriores), un paquete fuera del modelo declarativo de este repo no es
+reproducible por `nixos-rebuild` ni queda versionado -- movido a
+`home.packages` en `home/ale/home.nix`, junto a `weechat` (mismo patrón:
+herramienta CLI personal sin módulo declarativo propio en home-manager).
+Confirmado con `nix eval` contra el nixpkgs pineado real de este flake
+(`0.22.1`, mismo store path que ya tenía instalado) y con `nix build` del
+`system.build.toplevel` completo sin errores. **No se tocó** la instalación
+imperativa existente (`nix profile remove zola`) -- queda duplicada hasta que
+el usuario confirme el `nixos-rebuild switch` y decida si quiere limpiarla.
+**Pendiente manual:** `sudo nixos-rebuild switch --flake /nixdots#ale`.
