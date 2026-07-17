@@ -1398,3 +1398,44 @@ camino y una causa final que terminó siendo otra:
   sesión de Claude Code corriendo en `pcale`, la misma máquina que aloja
   Forgejo) — cero intentos de conexión de `got`, descartando que el
   servidor fuera la causa.
+
+## mpv + loupe (2026-07-17)
+
+A pedido del usuario ("agrega mpv y todas las dependencias para que pueda
+reproducir cualquier tipo de video, y agrega un visor de imágenes"), agregados
+ambos a `environment.systemPackages` en `modules/desktop.nix`.
+
+- **`mpv`: no hizo falta agregar ninguna dependencia de códecs aparte.**
+  Verificado leyendo el `package.nix` real de `mpv-unwrapped` y de
+  `ffmpeg/generic.nix` (no de memoria, mismo método que las rondas #10/#11):
+  `pkgs.mpv` enlaza `pkgs.ffmpeg`, que pese a resolver a la variante
+  `"small"` (`ffmpeg_8`) tiene `withSmallDeps ? ... || withFullDeps` y
+  `withHeadlessDeps ? ... || withSmallDeps` — es decir, `"small"` implica
+  `withHeadlessDeps = true`, que a su vez habilita por defecto dav1d (AV1),
+  libaom, libvpx (VP8/VP9), x264/x265, libbluray, vulkan, vaapi y,
+  confirmado con `nix eval` real sobre `buildInputs`, **`nv-codec-headers`**
+  (habilita nvdec/nvenc — decode/encode por hardware en la Nvidia real de
+  esta laptop vía `--hwdec=nvdec`, sin depender de ningún shim vaapi-nvidia
+  que no está instalado). El resto de contenedores/códecs (mpeg1/2/4, vc1,
+  prores, theora, etc.) los trae el propio ffmpeg sin libs externas. No se
+  usó `ffmpeg-full`: agrega sobre todo encoders/filtros raros irrelevantes
+  para reproducir, no decoders adicionales, y alarga mucho el build.
+  De paso, `nix build` mostró que `pkgs.mpv` (el wrapper, no
+  `mpv-unwrapped`) arrastra `yt-dlp` solo — reproducir una URL también
+  funciona sin instalar nada aparte.
+- **`loupe`** — visor de imágenes GTK4/Rust (proyecto GNOME, reemplazo de
+  `eog`). Elegido en vez de alternativas nativas de Wayland (`swayimg`/
+  `imv`) porque hereda el theme Gruvbox/Noctalia solo, vía el mismo
+  template built-in `"gtk4"` que ya usa Nautilus (confirmado que ambos
+  comparten stack GTK4/libadwaita) — las alternativas de Wayland puro no
+  tienen esa integración automática y requerirían theming a mano. El README
+  de Noctalia no recomienda ningún visor de imágenes en particular (fuera
+  de su alcance, mismo caso ya documentado para el gestor de archivos).
+- Ambos paquetes confirmados reales contra el nixpkgs del flake (`nix build
+  --no-link` de cada uno, resueltos desde el binary cache sin compilar) y
+  validado con `nix eval` que `mpv-with-scripts`/`loupe` aparecen en
+  `environment.systemPackages` del sistema completo, `config.assertions`
+  sigue en `[]`, y `config.system.build.toplevel` compila sin error.
+- **Pendiente manual:** correr `sudo nixos-rebuild switch --flake
+  /nixdots#ale` para aplicar (no lo corrí yo, ver política de acciones de
+  sistema).

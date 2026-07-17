@@ -154,6 +154,31 @@
          # reusa ssh-agent). "got commit" NO soporta firma GPG ni SSH (solo
          # "got tag -S" firma, y solo con SSH) -- para mantener los commits
          # firmados con la YubiKey seguir usando "git commit -S".
+
+    mpv  # reproductor de video/audio. Verificado con `nix eval`/`nix build`
+         # contra el nixpkgs real (no de memoria) que el `pkgs.mpv` de acá ya
+         # trae todo lo necesario para "cualquier tipo de video" sin agregar
+         # nada más: enlaza `pkgs.ffmpeg` (variante "small", que pese al
+         # nombre incluye withHeadlessDeps=true -- confirmado en
+         # ffmpeg/generic.nix) con dav1d (AV1), libaom, libvpx (VP8/VP9),
+         # x264/x265, libbluray, y sobre todo `nv-codec-headers` --
+         # confirmado en buildInputs -- que habilita nvdec/nvenc (decode por
+         # hardware en la Nvidia real de esta laptop vía `--hwdec=nvdec`, sin
+         # depender del shim vaapi-nvidia que no está instalado). El wrapper
+         # `pkgs.mpv` (no mpv-unwrapped) además arrastra `yt-dlp` solo, así
+         # que reproducir una URL también funciona sin instalar nada aparte.
+         # No hizo falta pasar a `ffmpeg-full`: agrega casi todo encoders/
+         # filtros raros irrelevantes para reproducir, no decoders extra.
+
+    loupe  # visor de imágenes -- GTK4/libadwaita (mismo stack que Nautilus,
+           # ya instalado), así que hereda el theme Gruvbox/Noctalia solo vía
+           # el template built-in "gtk4" (igual que Nautilus, ver comentario
+           # de arriba) sin declarar nada extra. El propio README de Noctalia
+           # no recomienda ningún visor de imágenes en particular (fuera de
+           # su alcance, mismo caso que el gestor de archivos) -- elegido por
+           # consistencia con el resto del setup GTK4 en vez de alternativas
+           # nativas de Wayland (swayimg/imv), que no traen esa integración
+           # automática de tema y requerirían configurarla a mano.
   ];
 
   # Necesario para que QT_QPA_PLATFORMTHEME=kde (de abajo) resuelva al plugin
