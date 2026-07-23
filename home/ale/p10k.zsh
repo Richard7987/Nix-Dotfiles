@@ -35,6 +35,7 @@
     os_icon                 # os identifier
     dir                     # current directory
     vcs                     # git status
+    got                     # got status (Game of Trees, ver /nixdots)
     # =========================[ Line #2 ]=========================
     newline                 # \n
     # prompt_char           # prompt symbol
@@ -518,6 +519,87 @@
   typeset -g POWERLEVEL9K_VCS_CLEAN_FOREGROUND=76
   typeset -g POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=76
   typeset -g POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=178
+
+  ###########################[ got: status for Game of Trees work trees ]#########################
+  # Game of Trees (got, gameoftrees.org) es el otro VCS que uso además de git (/nixdots es un
+  # work tree de got, no de git -- ver NOTES.md 2026-07-22 "Migración a got puro"). El "vcs" de
+  # arriba es git-only: gitstatusd solo habla git, y el fallback a vcs_info tampoco trae un
+  # backend "got" (no está en su lista de VCS soportados). Por eso esto es un segmento custom
+  # (mecanismo de p10k para VCS que no soporta de fábrica, ver `p10k help segment`) que porta a
+  # got el mismo contenido que my_git_formatter (arriba) construye para git: rama, ⇣/⇡
+  # ahead/behind contra el remoto, ~conflictos, +staged, !unstaged, ?untracked -- mismos
+  # colores 248/76/178/39/196 que ese formatter, para que un work tree de got se vea y se
+  # lea igual que uno de git en el prompt.
+  typeset -g POWERLEVEL9K_GOT_BRANCH_ICON='\uF126 '
+
+  function prompt_got() {
+    # Sube desde $PWD buscando .got, igual que got ubica su propio work tree.
+    local dir=$PWD
+    while [[ $dir != / && ! -d $dir/.got ]]; do
+      dir=${dir:h}
+    done
+    [[ -d $dir/.got ]] || return
+
+    local       meta='%248F'  # gris, igual que my_git_formatter
+    local      clean='%76F'   # verde
+    local   modified='%178F'  # amarillo
+    local  untracked='%39F'   # azul
+    local conflicted='%196F'  # rojo
+
+    # head-ref es texto plano (p.ej. "refs/heads/main") -- se lee directo, sin exec.
+    local branch=$(<$dir/.got/head-ref)
+    branch=${branch#refs/heads/}
+
+    local res="${meta}on ${clean}${(g::)POWERLEVEL9K_GOT_BRANCH_ICON}${branch//\%/%%}"
+
+    # --- behind/ahead contra refs/remotes/origin/<branch>, si existe ---
+    # Asume el remoto "origin" (el único configurado en este repo, ver
+    # /home/ale/nixdots.git/config) -- no se resuelve dinámicamente por simplicidad.
+    local repo_dir=$(<$dir/.got/repository)
+    local local_ref=$repo_dir/refs/heads/$branch
+    local remote_ref=$repo_dir/refs/remotes/origin/$branch
+    if [[ -f $local_ref && -f $remote_ref ]]; then
+      local local_hash=$(<$local_ref) remote_hash=$(<$remote_ref)
+      if [[ $local_hash != $remote_hash ]]; then
+        # -l 50: tope de seguridad -- si el otro extremo no aparece en 50 commits (rama
+        # de verdad divergida, no solo adelantada/atrasada), no se cuenta nada en vez de
+        # arriesgar un traversal larguísimo o un número incorrecto. Comprobado a mano en
+        # un repo got de prueba: sin chequear que el último hash trazado coincide con el
+        # commit objetivo, `got log -x` que nunca lo encuentra camina hasta el commit
+        # inicial y devuelve un conteo con pinta de válido pero equivocado.
+        local -a commits
+        commits=("${(@f)$(got log -r $repo_dir -c refs/heads/$branch -x refs/remotes/origin/$branch -l 50 2>/dev/null | grep '^commit ')}")
+        local ahead=0 behind=0
+        [[ ${#commits} -gt 0 && ${commits[-1]} == "commit ${remote_hash}"* ]] && ahead=$(( ${#commits} - 1 ))
+        commits=("${(@f)$(got log -r $repo_dir -c refs/remotes/origin/$branch -x refs/heads/$branch -l 50 2>/dev/null | grep '^commit ')}")
+        [[ ${#commits} -gt 0 && ${commits[-1]} == "commit ${local_hash}"* ]] && behind=$(( ${#commits} - 1 ))
+
+        (( behind )) && res+=" ${clean}⇣${behind}"
+        (( ahead && !behind )) && res+=" "
+        (( ahead )) && res+="${clean}⇡${ahead}"
+      fi
+    fi
+
+    # --- ~conflictos, +staged, !unstaged, ?untracked (columnas de `got status`: la
+    # primera es el estado sin stagear, la segunda el estado ya stageado con `got stage`) ---
+    local n_conflicted=0 n_staged=0 n_unstaged=0 n_untracked=0 line
+    while IFS= read -r line; do
+      [[ -z $line ]] && continue
+      case ${line[1]} in
+        '?') (( n_untracked++ ));;
+        C) (( n_conflicted++ ));;
+        [MD!~m]) (( n_unstaged++ ));;
+      esac
+      [[ ${line[2]} == [MAD] ]] && (( n_staged++ ))
+    done < <(got status 2>/dev/null)
+
+    (( n_conflicted )) && res+=" ${conflicted}~${n_conflicted}"
+    (( n_staged      )) && res+=" ${modified}+${n_staged}"
+    (( n_unstaged    )) && res+=" ${modified}!${n_unstaged}"
+    (( n_untracked   )) && res+=" ${untracked}?${n_untracked}"
+
+    p10k segment -t "$res"
+  }
 
   ##########################[ status: exit code of the last command ]###########################
   # Enable OK_PIPE, ERROR_PIPE and ERROR_SIGNAL status states to allow us to enable, disable and
