@@ -154,9 +154,13 @@
          # Reusa ssh-agent para clone/fetch/send por ssh://, igual que git.
          # "got commit" NO soporta firma GPG ni SSH (solo "got tag -S" firma,
          # y solo con SSH) -- los commits de este repo quedan sin firmar
-         # desde la migración; programs.git sigue instalado a nivel de
-         # sistema para otros repos y porque got lee autor/email de
-         # ~/.gitconfig (programs.git.settings.user.*, ver home.nix).
+         # desde la migración. El autor de los commits está declarado en
+         # got.conf del repo bare (~/nixdots.git/got.conf), NO se resuelve
+         # de programs.git/~/.gitconfig -- got solo lee el ~/.gitconfig
+         # clásico como último recurso, y este sistema usa el config de git
+         # en formato XDG (~/.config/git/config, ver home.nix), que got no
+         # mira. programs.git sigue instalado a nivel de sistema solo por
+         # otros repos ajenos a /nixdots.
 
     mpv  # reproductor de video/audio. Verificado con `nix eval`/`nix build`
          # contra el nixpkgs real (no de memoria) que el `pkgs.mpv` de acá ya

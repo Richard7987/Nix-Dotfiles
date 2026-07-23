@@ -1517,10 +1517,33 @@ arriesgar el checkout real:
   escenario de coexistencia con `git` en el mismo repo (ronda 2026-07-16,
   ya obsoleta) -- ahora documenta que `/nixdots` es un work tree de `got`
   sin `.git`, y que `programs.git` se mantiene a nivel de sistema solo por
-  otros repos y porque `got` resuelve el autor de los commits leyendo
-  `~/.gitconfig` (`programs.git.settings.user.*`) -- confirmado en vivo:
-  `got log` mostró `ale <ale_bnes@tuta.com>` sin declarar autor en ningún
-  `got.conf`.
+  otros repos ajenos a `/nixdots`.
+
+### BUG real (de esta misma migración), corregido: `got commit` no encontraba autor
+
+El primer `got commit` real sobre `/nixdots` falló con `GOT_AUTHOR
+environment variable is not set`. Según `got.1`/`got.conf.5`, el orden de
+resolución del autor es: variable de entorno `GOT_AUTHOR` → `got.conf` del
+repo → `user.name`/`user.email` en el `.git/config` del propio repo → **solo
+como último recurso**, `~/.gitconfig` global de Git. Este sistema gestiona
+la identidad de git vía home-manager en formato **XDG**
+(`~/.config/git/config`, confirmado con `cat`) -- **no** existe
+`~/.gitconfig` en `$HOME`, así que `got` no tenía de dónde sacar el autor
+por ningún lado. (La suposición inicial de esta misma sección, de que `got`
+sí leía la identidad desde `~/.gitconfig`/`programs.git`, era incorrecta --
+corregida acá tras reproducir el fallo en vivo.)
+
+**Fix:** declarado el autor directo en `got.conf` del repo bare
+(`~/nixdots.git/got.conf`):
+
+```
+author "ale <ale_bnes@tuta.com>"
+```
+
+Es la vía nativa de `got` (tiene prioridad sobre cualquier config de git) y
+no depende de dónde ni cómo esté declarada la identidad de git en el
+sistema. Confirmado con un commit real: `got log` mostró
+`ale <ale_bnes@tuta.com>` como autor sin volver a pedir `GOT_AUTHOR`.
 
 ### Qué NO se tocó
 
