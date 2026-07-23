@@ -231,6 +231,28 @@
         )
       }
 
+      # vpn up / vpn down: alterna a mano el exit node de Mullvad sin tocar
+      # la config declarativa. El oneshot de systemd en modules/tailscale.nix
+      # (tailscale-exit-node) ya lo deja fijado en cada arranque, así que esto
+      # es solo para apagarlo un rato (ej. necesitas tu IP real para algo) y
+      # volver a prenderlo después, sin esperar un reboot ni un rebuild
+      # switch. Sin pedir password: sudoers en modules/yubikey.nix ya permite
+      # `tailscale` con cualquier argumento (NOPASSWD) para el usuario ale.
+      vpn() {
+        case "$1" in
+          up)
+            sudo tailscale set --exit-node=mullvad-exit --exit-node-allow-lan-access=true
+            ;;
+          down)
+            sudo tailscale set --exit-node=
+            ;;
+          *)
+            echo "uso: vpn up|down"
+            return 1
+            ;;
+        esac
+      }
+
       # pfetch al final: después de p10k (ya cargado arriba) para no
       # imprimir nada antes de que el instant prompt se muestre -- si igual
       # sale una advertencia de "console output during initialization" (el
