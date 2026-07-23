@@ -46,6 +46,38 @@ pkgs/
   highlighting.
 - Theming Qt coherente (Kleopatra, pinentry-qt) vía `plasma-integration`.
 
+## Bootstrap en una PC nueva
+
+`got` no puede clonar por HTTPS desde GitHub (bug real, confirmado:
+`bufio_starttls` / `unexpected end of file` -- ver `NOTES.md`). Por eso el
+clone inicial se hace con `git` (una sola vez, contra el espejo público en
+GitHub, sin autenticación) y `got` toma el relevo desde el checkout:
+
+```sh
+# 1. clone inicial con git (repo público, sin YubiKey ni Tailscale)
+nix-shell -p git
+git clone --bare https://github.com/Richard7987/Nix-Dotfiles.git ~/nixdots.git
+
+# 2. got toma el relevo -- autor + remote real (SSH al Forgejo, no el
+#    espejo de GitHub, que got no puede fetch/send igual)
+nix-shell -p got
+cat > ~/nixdots.git/got.conf <<'EOF'
+author "ale <ale_bnes@tuta.com>"
+remote "origin" {
+	server git@pcale.tail32b955.ts.net
+	protocol ssh
+	port 2222
+	repository "/Ale/Nix-Dotfiles.git"
+	fetch { branch { "main" } }
+}
+EOF
+got checkout ~/nixdots.git /nixdots
+```
+
+Después: ajustar los placeholders de hardware (`hosts/ale/hardware-configuration.nix`,
+bus IDs en `modules/graphics.nix`, nombre de monitor en `home/ale/hyprland.lua`)
+y recién ahí el primer despliegue.
+
 ## Uso
 
 Primer despliegue:

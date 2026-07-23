@@ -1595,3 +1595,59 @@ corre 0.18.0"*, *"agregue configuracion para openBSD ya que usa Zola
 - No había instalación imperativa de `zola` en `nix profile list` (la
   duplicación que había quedado pendiente el 2026-07-17 ya no está) -- no
   hizo falta limpiar nada ahí.
+
+## Bootstrap en una PC nueva, con got puro (2026-07-22)
+
+A pedido del usuario: documentado cómo llevar `/nixdots` a una máquina
+recién instalada, dado que el repo real vive en un Forgejo solo accesible
+por Tailscale (`pcale.tail32b955.ts.net`), y ahora el repo local es un
+work tree de `got`, no de `git`. Probadas tres rutas reales, en orden:
+
+### Ruta 1, descartada: `got clone` por SSH al Forgejo real + Tailscale
+
+Funciona (`got clone`/`got checkout` nativos, probado end-to-end en un
+directorio descartable), pero exige levantar Tailscale a mano *antes* del
+primer switch (huevo y gallina: Tailscale lo configura este mismo repo) --
+más pasos de los necesarios si hay una alternativa más simple.
+
+### Ruta 2, descartada: `got clone` por HTTPS o SSH al espejo de GitHub
+
+- **HTTPS falla, bug real de `got` 0.126:** `got clone
+  https://github.com/Richard7987/Nix-Dotfiles.git` da
+  `got-fetch-http: bufio_starttls` / `unexpected end of file`,
+  reproducido dos veces. Descartado que sea de red: `curl`/`openssl
+  s_client` contra github.com funcionan perfecto (TLS y HTTP/2 sanos). Es
+  el cliente HTTP(S) minimalista propio de `got` (no usa libcurl como
+  `git`), que no tolera bien cómo GitHub sirve el protocolo smart HTTP
+  (HTTP/2, chunked encoding, etc.) -- no encontrado como bug documentado
+  en búsquedas, pero 100% reproducible en esta máquina.
+- **SSH sí funciona:** `got clone git@github.com:Richard7987/Nix-Dotfiles.git`
+  probado end-to-end con éxito (`got.conf` con el remote armado solo, HEAD
+  del checkout `5bb6e64...` idéntico al del Forgejo real -- confirma que
+  el espejo está al día). Requiere que la llave SSH de la YubiKey esté
+  agregada a la cuenta de GitHub -- confirmado que ya lo está
+  (`ssh -T git@github.com` → "Hi Richard7987!"). El host key de GitHub se
+  agregó a `known_hosts` tras verificar el fingerprint ED25519
+  (`SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`) contra la
+  documentación oficial de GitHub, no a ciegas.
+- Descartada de todos modos porque exige el bootstrap manual de
+  gpg-agent/YubiKey-SSH *antes* del primer switch (mismo problema de
+  huevo y gallina que la ruta 1, aunque sin depender de Tailscale).
+
+### Ruta 3, elegida: `git clone --bare` (una sola vez) + `got` para todo lo demás
+
+El espejo de GitHub (`https://github.com/Richard7987/Nix-Dotfiles.git`)
+es **público** -- `git clone --bare` funciona sin ninguna autenticación,
+sin YubiKey, sin Tailscale (probado real, HEAD `5bb6e64...` idéntico al
+Forgejo). `git` tolera sin problema lo mismo que rompe a `got` por HTTPS,
+así que se usa una sola vez, solo para bajar los objetos -- desde el
+`got checkout` en adelante todo el flujo es 100% `got`, igual que el
+resto de este repo.
+
+**Detalle importante:** el remote que dejó `git clone` en el `config` del
+bare repo apunta a `https://github.com/...` -- el mismo protocolo que
+falla en `got`. Hay que sobreescribir `got.conf` con el remote real
+(`ssh://git@pcale.tail32b955.ts.net:2222/...`) antes de usar `got
+fetch`/`got send`, o quedaría sirviendo solo para lectura vía checkout
+inicial. Procedimiento completo documentado en el README, sección
+"Bootstrap en una PC nueva".
