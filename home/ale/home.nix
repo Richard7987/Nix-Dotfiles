@@ -214,6 +214,10 @@
       # 2026-07-22) porque no hay NIX_PATH nixos-config. El subshell con
       # `set -e` corta en el primer error (ej. build roto) sin aplicar
       # switch ni tocar el cwd de la terminal interactiva.
+      # /nixdots es un work tree de got (sin .git, ver "Migración a got
+      # puro" en NOTES.md 2026-07-22) -- got commit no soporta firma, así
+      # que este commit de flake.lock queda sin firmar (a diferencia de los
+      # commits manuales de antes con git commit -S).
       nixos-update() {
         (
           set -e
@@ -221,9 +225,8 @@
           sudo nix flake update
           sudo nixos-rebuild build --flake .#ale
           sudo nixos-rebuild switch --flake .#ale
-          if ! git diff --quiet -- flake.lock; then
-            git add flake.lock
-            git commit -m "Actualiza flake.lock"
+          if [ -n "$(got status flake.lock)" ]; then
+            got commit -m "Actualiza flake.lock" flake.lock
           fi
         )
       }

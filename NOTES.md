@@ -1458,3 +1458,77 @@ Confirmado con `nix eval` contra el nixpkgs pineado real de este flake
 imperativa existente (`nix profile remove zola`) -- queda duplicada hasta que
 el usuario confirme el `nixos-rebuild switch` y decida si quiere limpiarla.
 **Pendiente manual:** `sudo nixos-rebuild switch --flake /nixdots#ale`.
+
+## Migración a got puro (2026-07-22)
+
+A pedido explícito del usuario: `/nixdots` dejó de ser un checkout de `git`
+y pasó a ser un *work tree* de `got` directamente -- ya no hace falta un
+work tree separado (`~/nixdots-got`) ni sincronizar de vuelta como en la
+sección "got (Game of Trees)" de arriba (2026-07-16). Aceptado
+explícitamente el trade-off: **los commits de este repo ya no llevan firma
+GPG** (`got commit` no soporta firma, ni GPG ni SSH -- solo `got tag -S`
+firma, y solo con SSH).
+
+### Validado antes de tocar el repo real
+
+Probado primero en un directorio descartable del scratchpad, para no
+arriesgar el checkout real:
+
+- `git clone --bare ssh://git@pcale.tail32b955.ts.net:2222/Ale/Nix-Dotfiles.git`
+  deja `remote.origin.url` ya configurado en el `config` del bare repo --
+  `got fetch -v origin` lo lee solo, sin necesitar `got.conf` a mano ni
+  tocar nada más. Confirmado con `strace` en la ronda anterior (2026-07-16)
+  que `got` ya sabía leer remotos de `.git/config`; esto confirma que un
+  bare clone fresco (sin working tree) también los trae listos.
+- **Preocupación real, descartada:** `nix flake` filtra por archivos
+  *trackeados por git* cuando el flake vive dentro de un repo git -- sin
+  `.git`, cae al fetcher `path:` (copia el directorio tal cual). Probado
+  `nix flake metadata`/`nix eval` sobre el work tree de prueba (sin `.git`,
+  solo `.got`) y salió limpio, exit 0, sin warnings. Incluso con un symlink
+  `result` de prueba presente (como el que deja `nixos-rebuild build` en
+  `/nixdots` real) -- Nix lo copia sin quejarse, y de paso `got status` ya
+  lo ignora solo (respeta `.gitignore`, que sigue en el repo con
+  `result`/`result-*`/`.direnv/`/`*.swp`).
+
+### Pasos reales sobre `/nixdots`
+
+1. `git clone --bare` del remoto real a `~/nixdots.git` -- repo bare
+   canónico, independiente del checkout viejo (paso aditivo, no tocó
+   `/nixdots` todavía).
+2. `mv /nixdots ~/nixdots-git-backup` -- el `mv` no pudo borrar el propio
+   directorio `/nixdots` de `/` (permiso denegado, `/` no es escribible por
+   `ale`), pero sí alcanzó a copiar y vaciar todo el contenido hacia el
+   backup antes de fallar en ese último paso. Resultado neto: `/nixdots`
+   quedó vacío (backup íntegro en `~/nixdots-git-backup`, confirmado con
+   `diff -rq` sin diferencias) -- justo lo que `got checkout` necesita.
+3. `got checkout ~/nixdots.git /nixdots` -- work tree nuevo, directo en el
+   path real. `diff -rq` contra el backup (excluyendo `.git`/`.got`/
+   `result`) salió vacío.
+4. Confirmado sin residuos: `/nixdots/.git` ya no existe.
+
+### Ajustes de código que dependían de `git`
+
+- **`home/ale/home.nix`, función `nixos-update`:** usaba
+  `git diff --quiet`/`git add`/`git commit` para el commit automático de
+  `flake.lock` tras cada actualización. Cambiado a
+  `got status flake.lock` (vacío si no hay cambios) +
+  `got commit -m "..." flake.lock` -- sin firma, a diferencia de antes.
+- **`modules/desktop.nix`, comentario de `got`:** ya no describe un
+  escenario de coexistencia con `git` en el mismo repo (ronda 2026-07-16,
+  ya obsoleta) -- ahora documenta que `/nixdots` es un work tree de `got`
+  sin `.git`, y que `programs.git` se mantiene a nivel de sistema solo por
+  otros repos y porque `got` resuelve el autor de los commits leyendo
+  `~/.gitconfig` (`programs.git.settings.user.*`) -- confirmado en vivo:
+  `got log` mostró `ale <ale_bnes@tuta.com>` sin declarar autor en ningún
+  `got.conf`.
+
+### Qué NO se tocó
+
+- El paquete `git` sigue en `environment.systemPackages`
+  (`hosts/ale/configuration.nix`) y `programs.git` en `home.nix` -- útiles
+  para otros repos ajenos a `/nixdots` y necesarios para que `got` resuelva
+  el autor de los commits (ver arriba). No se pidió sacar `git` del sistema,
+  solo del flujo de este repo.
+- `~/nixdots-git-backup` se dejó como red de seguridad (historia completa
+  de `git`, por si hace falta consultar algo que `got log` no muestre
+  igual) -- no se borró.

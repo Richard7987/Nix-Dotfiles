@@ -149,11 +149,14 @@
       # cliente de música self-hosted (Navidrome), reemplaza a feishin --
       # empaquetado vía su propio flake.nix (no está en nixpkgs). Hace
       # falta apuntarlo a un servidor la primera vez que se abre.
-    got  # VCS alternativo a git, mismo formato de repo bare en disco --
-         # coexiste con git en el mismo repo (clone/fetch/send por ssh://,
-         # reusa ssh-agent). "got commit" NO soporta firma GPG ni SSH (solo
-         # "got tag -S" firma, y solo con SSH) -- para mantener los commits
-         # firmados con la YubiKey seguir usando "git commit -S".
+    got  # VCS de este mismo repo (/nixdots ya es un work tree de got, sin
+         # .git -- ver "Migración a got puro" en NOTES.md, 2026-07-22).
+         # Reusa ssh-agent para clone/fetch/send por ssh://, igual que git.
+         # "got commit" NO soporta firma GPG ni SSH (solo "got tag -S" firma,
+         # y solo con SSH) -- los commits de este repo quedan sin firmar
+         # desde la migración; programs.git sigue instalado a nivel de
+         # sistema para otros repos y porque got lee autor/email de
+         # ~/.gitconfig (programs.git.settings.user.*, ver home.nix).
 
     mpv  # reproductor de video/audio. Verificado con `nix eval`/`nix build`
          # contra el nixpkgs real (no de memoria) que el `pkgs.mpv` de acá ya

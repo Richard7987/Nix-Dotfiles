@@ -4,6 +4,12 @@ Configuración NixOS de `ale` — laptop Intel+Nvidia con Hyprland +
 [Noctalia](https://docs.noctalia.dev/). Desplegada vía flake, sin
 gestión de secretos (la clave GPG vive en una YubiKey).
 
+Versionado con **[got](https://gameoftrees.org/)** (no `git`) — repo
+bare canónico en `~/nixdots.git`, `/nixdots` es su work tree. Los
+commits no llevan firma (`got commit` no soporta GPG/SSH); solo los
+tags pueden firmarse con SSH (`got tag -S`). Detalle de la migración en
+[`NOTES.md`](NOTES.md).
+
 ## Estructura
 
 ```
