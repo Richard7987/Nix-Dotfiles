@@ -1555,3 +1555,43 @@ sistema. Confirmado con un commit real: `got log` mostró
 - `~/nixdots-git-backup` se dejó como red de seguridad (historia completa
   de `git`, por si hace falta consultar algo que `got log` no muestre
   igual) -- no se borró.
+
+## zola sacado del sistema global, espacio de trabajo dedicado en `~/website` (2026-07-22)
+
+A pedido del usuario: `zola` (agregado a `home.packages` el 2026-07-17,
+ver sección "zola" arriba) sale de `home/ale/home.nix` -- ya no se instala
+a nivel de sistema. En su lugar, `~/website` es un devShell de Nix propio
+para el repo real del sitio (`Ale/wesite.git` en el Forgejo de `pcale`,
+tema Duckquill sobre Zola, dominio `nezzontli.xyz`), con **zola pineado a
+0.18.0 exacto** -- la versión real que corre el servidor OpenBSD que
+publica el sitio (confirmado contra el propio historial de commits del
+repo: *"el fix anterior de highlighting asumía Zola 0.22, el servidor
+corre 0.18.0"*, *"agregue configuracion para openBSD ya que usa Zola
+0.18.0"*). El `README.md` del propio repo del sitio dice "Zola v0.21.0+"
+-- inconsistente con el servidor real; señalado al usuario, no corregido
+(no se tocó ningún archivo del sitio salvo agregar el flake).
+
+- **Revisión de nixpkgs con zola == 0.18.0 exacto:**
+  `c3392ad349a5227f4a3464dce87bcc5046692fce` -- encontrada vía nixhub.io y
+  **verificada de forma independiente** con `nix eval --raw
+  "github:NixOS/nixpkgs/c3392ad349a5227f4a3464dce87bcc5046692fce#zola.version"`
+  (no se confió en la fuente externa sin comprobar contra Nix real).
+- **`~/website/flake.nix`**: un solo `devShells.x86_64-linux.default` con
+  `pkgs.zola` de esa revisión pineada -- independiente del `nixpkgs`
+  (nixos-unstable, zola 0.22.1) del resto del sistema. Confirmado con `nix
+  develop ~/website -c zola --version` → `zola 0.18.0` real.
+- **`~/website` es un work tree de `got`, no `git`** -- mismo patrón que la
+  migración de `/nixdots` de esta misma sesión: repo bare canónico en
+  `~/website.git` (clonado de
+  `ssh://git@pcale.tail32b955.ts.net:2222/Ale/wesite.git`, que ya existía
+  con historial real), `got.conf` con el autor declarado ahí mismo (mismo
+  fix que en `~/nixdots.git/got.conf`, ver sección de arriba -- este
+  sistema no tiene `~/.gitconfig` clásico, solo el XDG
+  `~/.config/git/config`, que `got` no lee).
+- El repo del sitio trae mezclado el historial completo de upstream del
+  tema Duckquill (miles de commits ajenos al sitio real, probablemente de
+  un `git subtree`/merge en algún punto) -- no se tocó, es preexistente y
+  ajeno a este cambio.
+- No había instalación imperativa de `zola` en `nix profile list` (la
+  duplicación que había quedado pendiente el 2026-07-17 ya no está) -- no
+  hizo falta limpiar nada ahí.
