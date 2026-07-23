@@ -1,182 +1,68 @@
-# Nix-Dotfiles — configuración NixOS de ale
+# nixdots
 
-Flake para migrar esta PC de FreeBSD a NixOS con Hyprland + [Noctalia](https://docs.noctalia.dev/).
+Configuración NixOS de `ale` — laptop Intel+Nvidia con Hyprland +
+[Noctalia](https://docs.noctalia.dev/). Desplegada vía flake, sin
+gestión de secretos (la clave GPG vive en una YubiKey).
 
-## Qué incluye
+## Estructura
 
-- **Hyprland** (config en Lua, `home/ale/hyprland.lua`) + **Noctalia shell** y **Noctalia Greeter**
-  (`modules/desktop.nix`, `home/ale/home.nix`).
-- **Gráficos duales Intel + Nvidia** en modo PRIME *sync*, con Steam/gamemode/CUDA
-  (`modules/graphics.nix`).
-- **YubiKey** para GPG + SSH vía `pcscd`/`gpg-agent`, con el comando `yubico` de
-  recuperación (`modules/yubikey.nix`, `home/ale/home.nix`).
-- **Tailscale** con exit node de Mullvad fijado automáticamente al arrancar
-  (`modules/tailscale.nix`).
-- **sudo** (con reglas `NOPASSWD` puntuales para `tailscale` y el restart de
-  `pcscd`, ver `modules/yubikey.nix`), **zen-browser** y **Kleopatra**.
-- **Bluetooth** + fix de AVRCP para controles de reproducción, y **LibrePods**
-  para controlar AirPods (modos de ruido, batería, etc.) — compilado de
-  fuente (`pkgs/librepods.nix`), sin AppImage ni pasos manuales. Códec A2DP
-  restringido a SBC/AAC (`sbc_xq` causaba audio cortado, ver ronda #13 de
-  `NOTES.md` — investigación de causa raíz todavía en curso).
-- **Carpetas XDG estándar** (`Desktop`, `Documents`, `Downloads`, `Music`,
-  `Pictures`, `Public`, `Templates`, `Videos`) declaradas vía
-  `xdg.userDirs` en `home/ale/home.nix`, en vez de creadas a mano.
-- **got** (Game of Trees, `modules/desktop.nix`) — VCS alternativo opcional
-  para trabajar con este mismo repo, en paralelo a `git`. Mismo formato de
-  repo Git en disco, coexisten sin problema. **`got commit`/`got tag` no
-  soportan firma GPG** (`got tag -S` firma, pero solo con SSH) -- los
-  commits firmados con la YubiKey siguen haciéndose con `git commit -S`.
-  Ver sección "got (Game of Trees)" en `NOTES.md` (2026-07-16) para el
-  detalle de por qué no es un reemplazo 1:1 de `git` en este repo, y cómo
-  usarlo (requiere un *work tree* propio, separado del clone de `git`).
-- **Theming Qt** (Kleopatra, pinentry-qt) coherente con Noctalia vía
-  `kdePackages.plasma-integration`/`breeze` + `QT_QPA_PLATFORMTHEME=kde`.
-- **Oh My Zsh + Powerlevel10k** (`home/ale/home.nix`, config generada con
-  `p10k configure` en `home/ale/p10k.zsh`).
-- **Cursor** Bibata-Modern-Amber vía `home.pointerCursor` (Hyprland cae a su
-  logo propio sin esto).
-- **WeeChat** (`home/ale/home.nix`) — cliente IRC de terminal, paquete
-  simple (sin módulo `programs.weechat` en home-manager); config de
-  plugins/servers se hace desde dentro del propio WeeChat, no versionada
-  en este repo. Ver `NOTES.md` (2026-07-16).
-- **IntelliJ IDEA Ultimate** (`jetbrains.idea`, directo de nixpkgs en
-  `home/ale/home.nix`) — no JetBrains Toolbox, no encaja con el modelo
-  declarativo del repo. Requiere login/licencia JetBrains la primera vez.
-- **PipeWire con `default.clock.allowed-rates` poblado**
-  (`modules/desktop.nix`) — sin esto el clock del grafo queda fijo en
-  48kHz sin margen (default de PipeWire), y clientes "bit-perfect" que
-  piden la tasa nativa de archivos hi-res (ej. FLAC 24-bit/192kHz) fuerzan
-  un resample silencioso. Ver "IntelliJ IDEA Ultimate, nokkvi, y audio
-  cortado en psysonic con álbumes hi-res" en `NOTES.md` (2026-07-16/17)
-  para el diagnóstico completo (incluye un bug real de Noctalia encontrado
-  en el camino, con patch armado y después revertido por no ser la causa).
+```
+flake.nix                        # inputs y nixosConfigurations.ale
+hosts/ale/
+  configuration.nix              # boot, red, locale, usuario, nix.settings
+  hardware-configuration.nix     # generado por nixos-generate-config
+modules/
+  desktop.nix                    # Hyprland, Noctalia (+greeter), audio, fuentes, paquetes de sistema
+  graphics.nix                   # PRIME sync Intel/Nvidia, Steam, gamemode, CUDA
+  yubikey.nix                    # pcscd, sudo (reglas NOPASSWD puntuales)
+  tailscale.nix                  # exit node de Mullvad fijado al arrancar
+home/ale/
+  home.nix                       # home-manager: zsh/p10k, git, gpg-agent, LibrePods, paquetes de usuario
+  hyprland.lua                   # config de Hyprland (Lua, no hyprland.conf)
+  p10k.zsh                       # prompt Powerlevel10k
+pkgs/
+  librepods.nix                  # LibrePods (control AirPods) compilado de fuente
+```
 
-## Antes del primer `nixos-rebuild switch`
+## Stack
 
-**✅ Ya resuelto (máquina instalada y en uso desde 2026-07-12/13, ver
-`NOTES.md` ronda #12).** Queda como referencia histórica de lo que había
-que ajustar al migrar desde la sesión de FreeBSD:
+- **Hyprland** + **Noctalia** (shell y greeter), tema Gruvbox, wallpapers vía
+  `github:AngelJumbo/gruvbox-wallpapers`.
+- **Gráficos duales** Intel/Nvidia en modo PRIME *sync* (driver propietario,
+  `legacy_580` — esta GPU es Pascal). Steam + gamemode + CUDA.
+- **YubiKey** para GPG/SSH (`pcscd` + `gpg-agent`, comando `yubico` para
+  reiniciarla si deja de responder).
+- **Tailscale** con exit node de Mullvad.
+- **sudo**, con `wheel` normal + NOPASSWD puntual para `pcscd`/`tailscale`.
+- **Bluetooth/AirPods**: LibrePods compilado de fuente (`pkgs/librepods.nix`),
+  fix de AVRCP para play/pause/skip, códec A2DP restringido a SBC/AAC.
+- **zsh**: Oh My Zsh + Powerlevel10k + fzf-tab + autosuggestions + syntax
+  highlighting.
+- Theming Qt coherente (Kleopatra, pinentry-qt) vía `plasma-integration`.
 
-Ya resueltas desde el armado inicial: terminal (kitty), teclado (`us` +
-variante `altgr-intl`, así `AltGr+n` da `ñ`), navegador (`zen-beta`), zona
-horaria (`America/Mexico_City`) y audio (pipewire + wireplumber, ya
-activado en `modules/desktop.nix`).
+## Uso
 
-Los 4 `AJUSTAR` que dependían de hardware real ya se resolvieron todos
-contra la máquina real:
-
-1. **`hosts/ale/hardware-configuration.nix`** — ✅ reemplazado por el real
-   generado por `nixos-generate-config`.
-2. **`system.stateVersion` / `home.stateVersion`** — ✅ ambos en `"26.05"`
-   (valor real del instalador). **Nunca se cambia después.**
-3. **`modules/graphics.nix`** — ✅ `intelBusId`/`nvidiaBusId` confirmados
-   contra `lspci -D | grep -E "VGA|3D"` real (`0000:00:02.0` Intel,
-   `0000:01:00.0` Nvidia).
-4. **`home/ale/hyprland.lua`** — ✅ nombre de monitor confirmado con
-   `hyprctl monitors` real: sí es `"eDP-1"`.
-
-## Validado con `nix eval` real
-
-Esta config fue evaluada de punta a punta con Nix real (instalado vía `pkg
-install nix` en la sesión de FreeBSD donde se armó, usando un store local
-sin privilegios: `NIX_REMOTE="local?root=$HOME/.nix-testroot"`). Con un
-`fileSystems."/"` temporal de prueba (revertido después),
-`config.system.build.toplevel.drvPath` se construyó sin errores, todas las
-`assertions` del sistema evaluaron `true`, y cada paquete referenciado en
-`environment.systemPackages`/`home.packages` resolvió contra el nixpkgs
-real. `flake.lock` en este repo viene de esa corrida. Sigue habiendo cosas
-que solo se pueden probar en la máquina real (arranque, hardware, sesión
-gráfica) — ver "Antes del primer switch" arriba.
-
-## Primer despliegue
+Primer despliegue:
 
 ```sh
-# clona esto en la máquina NixOS (o usa este mismo checkout si ya migraste)
-sudo nixos-rebuild build --flake .#ale   # primero build, para detectar errores sin aplicar
+sudo nixos-rebuild build --flake .#ale   # detecta errores sin aplicar
 sudo nixos-rebuild switch --flake .#ale
 ```
 
-## Después del primer switch
+Actualizar el sistema (flake update + build + switch + commit de
+`flake.lock` si cambió):
 
-- **✅ YubiKey/GPG** — hecho y verificado de punta a punta (llave importada,
-  confianza ultimate, commit de prueba firmado y verificado con
-  `git log --show-signature`). Comandos para referencia (ej. si reinstalas):
+```sh
+nixos-update   # función de zsh, definida en home/ale/home.nix
+```
 
-  ```sh
-  gpg --keyserver-options no-self-sigs-only \
-    --fetch-key https://codeberg.org/Richard7987/gpg-keys/raw/branch/main/ale_bnes.pub.asc
-  # marca ultimate (no interactivo -- "trust" pide nivel 1-5 + confirmación):
-  echo -e "5\ny\n" | gpg --no-tty --command-fd 0 --edit-key DBD5F61D8A0A14D7 trust quit
-  ```
+Si la YubiKey deja de responder:
 
-  (Antes tenía `--recv-keys --fetch-key <url>` en un mismo comando -- gpg los
-  trata como dos "comandos" distintos e incompatibles entre sí, tira
-  "órdenes incompatibles". Ya corregido.)
+```sh
+yubico   # función de zsh: reinicia pcscd + gpg-agent
+```
 
-  Con la YubiKey insertada, prueba `gpg --card-status` y `ssh-add -L`. Si algo
-  se traba, usa el comando `yubico` (definido en tu zsh). **SSH ya funcionaba
-  solo** desde el primer switch (`services.gpg-agent.enableSshSupport`), sin
-  necesitar ningún paso extra.
-- **✅ Tailscale** — autenticado, exit node `mullvad-exit` activo y
-  persistido. Para referencia (primera vez / si reinstalas):
+## Notas
 
-  ```sh
-  sudo tailscale up
-  ```
-
-  El exit node se fija solo después de esto vía el servicio
-  `tailscale-exit-node` — a diferencia de FreeBSD, aquí no depende de ningún
-  driver wifi con fallos intermitentes.
-- **✅ Noctalia** — los atajos `mainMod+Space` / `+S` / `+comma` / `+L` ya
-  están declarados en `hyprland.lua` con el comando IPC real (`noctalia msg
-  panel-toggle ...` / `settings-toggle` / `session lock`), confirmado
-  contra la doc oficial. Ya no es "revisa si funciona por su cuenta" —
-  está resuelto explícito.
-- **✅ LibrePods (AirPods)** — ya no es manual. No hay paquete Nix oficial ni
-  release de Linux en GitHub (el binario real vive en la rama `linux/rust`
-  de una PR sin mergear, kavishdevar/librepods#241, sin releases publicados),
-  pero resultó ser un proyecto Cargo normal sin nada específico de AppImage
-  en runtime -- se compila de fuente directo en `pkgs/librepods.nix`
-  (`rustPlatform.buildRustPackage`, pineado a un commit). Build verificado en
-  vivo en esta máquina (compila, corre, `autoPatchelfHook` resuelve
-  vulkan-loader/wayland/libpulseaudio/dbus sin faltantes). Corre `librepods`
-  directo, sin AppImage ni `appimage-run`. Para actualizar a una versión más
-  nueva: actualizar `rev`/`hash` en `pkgs/librepods.nix` a mano (no hay
-  releases con versión estable que trackear automáticamente).
-
-  El fix de AVRCP para que play/pause/skip funcionen desde los AirPods ya
-  está aplicado a nivel de sistema
-  (`services.pipewire.wireplumber.extraConfig` en `modules/desktop.nix`), se
-  aplica solo en cada `nixos-rebuild switch`.
-
-  **⚠️ Audio Bluetooth cortado, parcialmente resuelto:** el códec `sbc_xq`
-  (mayor bitrate, PipeWire lo negocia por defecto) causaba audio
-  entrecortado -- restringido a `bluez5.codecs = ["sbc" "aac"]` en
-  `modules/desktop.nix`. Con SBC normal sonó limpio al principio pero se
-  degradó tras un rato de uso sostenido, se recuperó tras una pausa, y
-  volvió a fallar -- mismo patrón probando con AAC. Hipótesis actual:
-  throttling térmico del adaptador Bluetooth/WiFi combo (Intel AC9560), no
-  confirmado todavía. Ver ronda #13 de `NOTES.md` para el diagnóstico
-  completo (se descartó LibrePods, contienda con otro dispositivo, xruns
-  de PipeWire y pérdida de paquetes Bluetooth vía `btmon`).
-
-  Aparte de eso: los mensajes de `BAP requires ISO Socket`/`Hands-Free
-  Voice gateway SDP record`/`a2dp-sink ... Protocol not available` en
-  `journalctl` están diagnosticados y **no son un bug** -- limitación de
-  hardware del adaptador (sin soporte LE Audio) y ruido normal de
-  reconexión a los AirPods cuando están apagados/fuera de rango. Ver
-  sección "Revisión de logs del sistema" en `NOTES.md` (2026-07-16).
-- **Cursor** — requiere cerrar sesión/reiniciar la primera vez para que
-  Hyprland tome `HYPRCURSOR_THEME`/`HYPRCURSOR_SIZE` (son variables que el
-  compositor lee al arrancar, no se pueden refrescar en caliente como
-  `QT_QPA_PLATFORMTHEME`).
-- **⚠️ noctalia-greeter: segfault del compositor al salir, en cada
-  arranque** -- no bloquea el login (pasa después de que la sesión ya se
-  entregó a Hyprland), pero está en el log de todos los arranques
-  registrados. Input `noctalia-greeter` actualizado a último commit
-  (`b0735981`) como intento de fix, sin confirmación upstream de que lo
-  resuelva. **Pendiente: verificar con `coredumpctl list --since=today`
-  tras el próximo reinicio real** (`greetd.service` no se reinicia en
-  caliente con `nixos-rebuild switch`). Ver "Revisión de logs del sistema"
-  en `NOTES.md` (2026-07-16) para el diagnóstico completo.
+El *por qué* de cada decisión (y el historial de auditorías/bugs
+encontrados durante la migración desde FreeBSD) está en [`NOTES.md`](NOTES.md).
