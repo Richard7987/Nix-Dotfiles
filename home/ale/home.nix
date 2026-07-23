@@ -207,6 +207,27 @@
         gpg-connect-agent updatestartuptty /bye >/dev/null 2>&1
       }
 
+      # nixos-update: flujo completo de actualización del sistema. Este
+      # equipo se despliega vía flake (/nixdots#ale), NO vía nix-channel --
+      # `nixos-rebuild switch --upgrade` a secas falla acá ("file
+      # 'nixos-config' was not found in the Nix search path", ver NOTES.md
+      # 2026-07-22) porque no hay NIX_PATH nixos-config. El subshell con
+      # `set -e` corta en el primer error (ej. build roto) sin aplicar
+      # switch ni tocar el cwd de la terminal interactiva.
+      nixos-update() {
+        (
+          set -e
+          cd /nixdots
+          sudo nix flake update
+          sudo nixos-rebuild build --flake .#ale
+          sudo nixos-rebuild switch --flake .#ale
+          if ! git diff --quiet -- flake.lock; then
+            git add flake.lock
+            git commit -m "Actualiza flake.lock"
+          fi
+        )
+      }
+
       # pfetch al final: después de p10k (ya cargado arriba) para no
       # imprimir nada antes de que el instant prompt se muestre -- si igual
       # sale una advertencia de "console output during initialization" (el
