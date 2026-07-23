@@ -126,6 +126,13 @@ for i = 1, 9 do
   hl.bind(mainMod .. "+SHIFT+" .. i, hl.dsp.window.move({ workspace = tostring(i) }))
 end
 
+-- Meta + rueda del mouse = workspace siguiente/anterior (relativo, "e+1"/"e-1").
+-- Sintaxis tomada del hyprland.lua de ejemplo que trae el propio paquete
+-- (/run/current-system/sw/share/hypr/hyprland.lua), no hay doc separada de
+-- mouse_down/mouse_up en la wiki.
+hl.bind(mainMod .. "+mouse_down", hl.dsp.focus({ workspace = "e+1" }))
+hl.bind(mainMod .. "+mouse_up", hl.dsp.focus({ workspace = "e-1" }))
+
 -- --- Teclas multimedia ---
 -- Vía IPC de Noctalia (no wpctl/brightnessctl directo) para que el OSD de
 -- volumen/brillo del shell se muestre en pantalla -- tal cual lo documenta
