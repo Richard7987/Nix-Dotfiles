@@ -59,10 +59,14 @@ nix-shell -p git
 git clone --bare https://github.com/Richard7987/Nix-Dotfiles.git ~/nixdots.git
 
 # 2. got toma el relevo -- autor + remote real (SSH al Forgejo, no el
-#    espejo de GitHub, que got no puede fetch/send igual)
+#    espejo de GitHub, que got no puede fetch/send igual) + allowed_signers
+#    para poder verificar tags firmados (got tag -V, ver más abajo)
 nix-shell -p got
+ssh-add -L > ~/.ssh/yubikey.pub
+echo "ale_bnes@tuta.com $(cat ~/.ssh/yubikey.pub)" > ~/.ssh/allowed_signers
 cat > ~/nixdots.git/got.conf <<'EOF'
 author "ale <ale_bnes@tuta.com>"
+allowed_signers "/home/ale/.ssh/allowed_signers"
 remote "origin" {
 	server git@pcale.tail32b955.ts.net
 	protocol ssh
@@ -74,9 +78,31 @@ EOF
 got checkout ~/nixdots.git /nixdots
 ```
 
+`~/.ssh/allowed_signers` y `~/nixdots.git/got.conf` viven fuera del work
+tree (no versionados) -- este paso hay que repetirlo en cada PC nueva,
+no es algo que el `checkout` traiga solo.
+
 Después: ajustar los placeholders de hardware (`hosts/ale/hardware-configuration.nix`,
 bus IDs en `modules/graphics.nix`, nombre de monitor en `home/ale/hyprland.lua`)
 y recién ahí el primer despliegue.
+
+## Firmar un release (tag)
+
+Los commits de este repo no llevan firma (`got commit` no la soporta).
+Para marcar una versión de forma verificable, se usa un tag firmado con
+SSH vía la YubiKey (requiere `allowed_signers` ya configurado, ver
+bootstrap arriba):
+
+```sh
+cd /nixdots
+got tag -S ~/.ssh/yubikey.pub -m "mensaje describiendo esta versión" v2026.07.22
+got send -t v2026.07.22 origin
+got tag -V v2026.07.22   # verifica la firma
+```
+
+Esquema de versión: **CalVer** (`vAAAA.MM.DD`) -- cada tag es una foto
+fechada del sistema, sin tener que decidir qué cuenta como cambio
+"mayor" o "menor" (no hay una API que romper en un repo de dotfiles).
 
 ## Uso
 

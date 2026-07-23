@@ -1651,3 +1651,41 @@ falla en `got`. Hay que sobreescribir `got.conf` con el remote real
 fetch`/`got send`, o quedaría sirviendo solo para lectura vía checkout
 inicial. Procedimiento completo documentado en el README, sección
 "Bootstrap en una PC nueva".
+
+## Primer release firmado, `v2026.07.22` (2026-07-22)
+
+A pedido del usuario: creado el primer tag firmado del repo, versionado
+con **CalVer** (`vAAAA.MM.DD`) -- elegido sobre SemVer porque un repo de
+dotfiles no tiene una "API" que romper, y CalVer evita tener que juzgar
+subjetivamente si un cambio es "mayor" o "menor" cada vez que se etiqueta.
+
+- **`got tag -S <archivo> -m "..." <nombre>`** firma con SSH -- el
+  argumento de `-S` es un *archivo*, no un identificador de agente: hace
+  falta volcar la clave pública de la YubiKey a un archivo primero
+  (`ssh-add -L > ~/.ssh/yubikey.pub`), aunque la privada viva en la card
+  y nunca toque disco. Probado real: `got tag` + `got send -t <tag>
+  origin` funcionaron a la primera.
+- **BUG/gap real encontrado en la verificación:** `got tag -V` falló con
+  `SSH signature verification requires setting allowed_signers in
+  got.conf(5)` -- a diferencia de la firma (que solo necesita el archivo
+  de `-S`), la *verificación* exige declarar explícitamente qué
+  identidades son confiables, vía un archivo en formato "allowed
+  signers" de `ssh-keygen(1)` (`principal tipo-de-clave clave-base64`,
+  mismo formato que usa `git`'s `gpg.ssh.allowedSignersFile`). Resuelto:
+  ```
+  echo "ale_bnes@tuta.com $(cat ~/.ssh/yubikey.pub)" > ~/.ssh/allowed_signers
+  ```
+  y declarado en `got.conf` con `allowed_signers "/home/ale/.ssh/allowed_signers"`.
+  Confirmado con un segundo `got tag -V`: `Good "git" signature for
+  ale_bnes@tuta.com with RSA key SHA256:xzYTNmH+...`.
+- **Ni `~/.ssh/allowed_signers` ni `~/nixdots.git/got.conf` están
+  versionados** (viven fuera del work tree, y `got.conf` además tiene el
+  remote real que no tendría sentido publicar como plantilla genérica) --
+  agregado el paso completo (guardar la pub key + `allowed_signers` +
+  la línea en `got.conf`) a la sección "Bootstrap en una PC nueva" del
+  README, para no tener que redescubrir esto en la próxima instalación.
+- Mensaje del tag: resumen del stack completo (Hyprland+Noctalia/Gruvbox,
+  gráficos duales PRIME sync, YubiKey, Tailscale+Mullvad, LibrePods) más
+  una nota de que el repo se versiona con `got` sin firma de commits --
+  pensado para que el tag sirva como snapshot legible por sí solo, sin
+  tener que ir a leer `NOTES.md` para saber qué es esta versión.
