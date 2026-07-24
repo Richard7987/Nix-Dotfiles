@@ -19,6 +19,16 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
+  # Sin esto no hay swap en absoluto (hardware-configuration.nix trae
+  # swapDevices = [ ]), y systemd-oomd queda "degradado" bajo presión de
+  # memoria (no puede intervenir a tiempo vía PSI). Resultado observado:
+  # el sistema se puso cada vez más lento hasta quedar totalmente
+  # colgado (journald "Under memory pressure, flushing caches", D-Bus
+  # timeouts al intentar suspender) sin que el OOM-killer llegara a
+  # dispararse, forzando un apagado por hardware. zram le da a oomd un
+  # swap comprimido en RAM para reclamar memoria a tiempo.
+  zramSwap.enable = true;
+
   # --- Red ---
   networking.hostName = "ale";
   # networking.networkmanager.enable ya se activa en modules/desktop.nix (requisito de Noctalia)
