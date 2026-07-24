@@ -78,6 +78,7 @@ EOF
 got checkout ~/nixdots.git /nixdots
 ```
 
+
 `~/.ssh/allowed_signers` y `~/nixdots.git/got.conf` viven fuera del work
 tree (no versionados) -- este paso hay que repetirlo en cada PC nueva,
 no es algo que el `checkout` traiga solo.
