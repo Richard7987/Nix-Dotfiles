@@ -55,6 +55,10 @@ hl.config({
   animations = {
     enabled = true,
   },
+
+  ecosystem = {
+    no_update_news = true,
+  },
 })
 
 -- Hyprland >= 0.51 reemplazó el viejo `gestures:workspace_swipe` (booleano)

@@ -1755,3 +1755,55 @@ Diagnóstico contra el sistema real (`wpctl status`, `wpctl inspect`,
    vivo de WirePlumber/Noctalia (fuera del repo), no una mala
    configuración declarativa -- no había nada que "arreglar" en
    `modules/desktop.nix`.
+
+### Auditoría de logs (2026-07-24, a pedido del usuario) + `ecosystem.no_update_news`
+
+Revisados `journalctl -p 3 -xb` (errores del boot actual) y
+`systemctl --failed` / `systemctl --user --failed` (system y user, ambos
+sin unidades fallidas persistentes).
+
+- **BUG real, corregido:** `tailscale-exit-node.service`
+  (`modules/tailscale.nix`) fallaba en el primer intento en el 100% de
+  los arranques -- `journalctl -u tailscale-exit-node` mostraba
+  `invalid value "mullvad-exit" for --exit-node; must be IP or hostname`
+  seguido de `Main process exited, code=exited, status=1/FAILURE` y
+  `Failed to start Fijar exit node de Mullvad en Tailscale.`. Causa: el
+  servicio corre en cuanto `tailscaled.service` está activo, pero
+  "activo" no significa "netmap ya sincronizado" -- sin el netmap,
+  tailscaled no puede resolver el nombre `mullvad-exit` a un peer. El
+  `Restart = "on-failure"` con `RestartSec = "10s"` ya existente lo
+  disimulaba (10s después el netmap ya había llegado y el reintento
+  funcionaba con `ExitNodeIP=...` en vez del nombre), pero dejaba un
+  fallo real en el journal en cada boot. Corregido moviendo el reintento
+  *adentro* del `ExecStart` (`pkgs.writeShellScript` con un loop de hasta
+  10 intentos / 2s de por medio) para que systemd solo vea un fallo si
+  de verdad se agotan los reintentos. Validado con `nix flake check
+  --no-build` y `nix build .#nixosConfigurations.ale.config.system.build.toplevel`
+  (sin sudo), ambos sin errores. Aplicado por el usuario con
+  `sudo nixos-rebuild switch --flake /nixdots#ale` (`Done.` sin errores) y
+  **confirmado**: `systemctl status tailscale-exit-node.service` después
+  del switch muestra `status=0/SUCCESS` en un solo intento, sin el
+  `Failed to start` que aparecía en cada arranque anterior.
+- **Ya documentado, no es un bug nuevo:** `BAP requires ISO Socket which
+  is not enabled` (bluetoothd) -- hardware sin soporte LE Audio, ver
+  auditoría de journalctl anterior más arriba en este archivo.
+- **Confirmado, sigue sin fix upstream:** el segfault de
+  `noctalia-greeter-compositor` (ver sección "noctalia-greeter: segfault
+  en el compositor al salir" más arriba) **sigue apareciendo** tras un
+  reinicio real con el pin actualizado (`flake.lock` ahora en
+  `8e53bb30`, más nuevo que el `b0735981` de la ronda anterior) --
+  `coredumpctl list --since=today` muestra el mismo crash
+  (`noctalia-greeter-compositor`, SIGSEGV) en el arranque de hoy. Sigue
+  siendo inofensivo (pasa después de `shutdown complete`, con la sesión
+  ya entregada a Hyprland) y sin fix conocido en el tracker upstream --
+  no se volvió a tocar `flake.lock` por esto sin evidencia de un commit
+  que lo arregle.
+- **Cambio pedido por el usuario, no un bug:** agregado
+  `ecosystem = { no_update_news = true }` al bloque `hl.config(...)` de
+  `home/ale/hyprland.lua`, para que Hyprland deje de mostrar el aviso de
+  "hay una versión nueva" al arrancar. Clave confirmada contra el stub
+  real del paquete instalado
+  (`.../hyprland-0.55.4/share/hypr/stubs/hl.meta.lua`, lista
+  `ecosystem.no_update_news` como `boolean`), no adivinada. Sintaxis
+  verificada cargando el archivo con `lua5.4` (`loadfile`, sin
+  ejecutar) sin errores.
