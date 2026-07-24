@@ -100,8 +100,6 @@ got send -t v2026.07.22 origin
 got tag -V v2026.07.22   # verifica la firma
 ```
 
-
-
 Esquema de versión: **CalVer** (`vAAAA.MM.DD`) -- cada tag es una foto
 fechada del sistema, sin tener que decidir qué cuenta como cambio
 "mayor" o "menor" (no hay una API que romper en un repo de dotfiles).
