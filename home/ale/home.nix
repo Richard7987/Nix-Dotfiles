@@ -303,6 +303,13 @@
       # (no hay `programs.weechat`, se confirmó buscando en el source real del
       # input), así que la config de plugins/scripts queda a mano dentro de
       # weechat (`/script install ...`), no versionada en este repo.
+    btop # monitor de recursos en terminal -- Noctalia ya trae un template de
+      # color built-in para btop (theme.templates, ver comentario más arriba),
+      # pero el paquete en sí no estaba instalado; sin él, ese template no
+      # tenía nada a qué aplicarse.
+    obsidian # notas locales en Markdown -- paquete directo de nixpkgs, sin
+      # módulo declarativo propio (guarda su config/vaults dentro de cada
+      # vault, no hay nada que declarar acá).
     jetbrains.idea # IntelliJ IDEA Ultimate -- paquete directo de nixpkgs, no
       # Toolbox: Toolbox baja binarios fuera del store y se autoactualiza por
       # su cuenta, no encaja con el modelo declarativo de este repo (mismo
