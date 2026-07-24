@@ -1689,3 +1689,69 @@ subjetivamente si un cambio es "mayor" o "menor" cada vez que se etiqueta.
   una nota de que el repo se versiona con `got` sin firma de commits --
   pensado para que el tag sirva como snapshot legible por sí solo, sin
   tener que ir a leer `NOTES.md` para saber qué es esta versión.
+
+## btop + Obsidian, y volumen/micrófono rotos tras un cuelgue de Noctalia (2026-07-24)
+
+### `btop` y `obsidian` agregados a `home.packages`
+
+`btop` ya tenía un template de color built-in de Noctalia activo
+(`theme.templates`, ver `home.nix`) pero el paquete nunca se había
+instalado -- el template no tenía nada a qué aplicarse. `obsidian` es
+directo de nixpkgs, sin módulo declarativo propio (guarda config/vaults
+dentro de cada vault). Build (`nixos-rebuild build --flake .#ale`)
+verificado en la máquina real antes de reportar terminado.
+
+### BUG real, diagnosticado en vivo: volumen y micrófono "rotos" tras desconectar el DAC/audífonos
+
+El usuario reportó que al desconectar sus audífonos (el DAC USB HiBy FC4)
+el sistema seguía reproduciendo sonido por la bocina interna, pero ni el
+slider de volumen de Noctalia ni las teclas `XF86Audio*` (que van todas
+por `noctalia msg volume-up/down/mute`, IPC al mismo proceso -- ver
+`hyprland.lua`) lo subían/bajaban, y tampoco aparecía el micrófono
+interno.
+
+Diagnóstico contra el sistema real (`wpctl status`, `wpctl inspect`,
+`pw-metadata -n default`, `~/.local/state/wireplumber/default-nodes`,
+`~/.cache/noctalia/noctalia.log`):
+
+1. **PipeWire/WirePlumber estaban bien**: `default.audio.sink` en la
+   metadata de PipeWire ya apuntaba correctamente al ALSA interno
+   (`alsa_output.pci-0000_00_1f.3.analog-stereo`, nodo con `*` en
+   `wpctl status`) -- el fallback automático de WirePlumber cuando el
+   `default.configured.audio.sink` (el HiBy FC4, guardado en
+   `default-nodes`) desaparece funciona como corresponde. Esto explica
+   por qué el sonido seguía sonando bien.
+2. **La causa real era Noctalia, no PipeWire**: el log
+   (`~/.cache/noctalia/noctalia.log`) mostró que el proceso se había
+   colgado ~6 minutos (`poll source ... dispatch took 329971.4ms`,
+   `script callback 'update' timed out`) justo en la ventana de tiempo
+   en que probablemente se desconectó el DAC -- consistente con que
+   desenchufar un dispositivo de audio USB puede bloquear
+   sincrónicamente el loop de eventos de un cliente de PipeWire durante
+   la renegociación ALSA/udev. El proceso se reinició solo a los ~6 min,
+   pero el widget de volumen (`[volume_widget]` en el log) nunca volvió
+   a loguear un `sync` tras el reinicio -- se quedó sin saber cuál era
+   el nodo default, así que tanto el slider como el IPC de las teclas de
+   volumen no tenían a qué mandar el cambio (aunque el enrutamiento real
+   de PipeWire, independiente de Noctalia, seguía funcionando solo).
+3. **Fix aplicado en caliente**: matar el proceso de Noctalia colgado y
+   relanzarlo (`pgrep -a noctalia` -> `kill` -> relanzar el binario de
+   `/etc/profiles/per-user/ale/bin/noctalia`). Verificado con un test
+   preciso antes/después (`wpctl get-volume @DEFAULT_AUDIO_SINK@` +
+   `noctalia msg volume-up`, 0.15 -> 0.20, el paso de 5% esperado) que
+   el widget volvió a sincronizarse con el nodo default real. Si vuelve
+   a pasar (desconectar el DAC mientras Noctalia está en medio de otra
+   cosa pesada, ej. el hang de un plugin Luau visto acá), el remedio es
+   el mismo: reiniciar Noctalia, no tocar la config de PipeWire.
+4. **Aparte, no relacionado al cuelgue**: el micrófono interno
+   (`alsa_input.pci-0000_00_1f.3.analog-stereo`) estaba muteado a
+   volumen 0 en el estado persistido de WirePlumber
+   (`~/.local/state/wireplumber/default-routes`,
+   `analog-input-internal-mic` con `"mute":true`) desde hace tiempo --
+   no es un bug de esta sesión, probablemente nunca se había usado el
+   micrófono interno y quedó en su estado por defecto. Desmuteado y
+   puesto a 50% con `wpctl set-mute`/`set-volume @DEFAULT_AUDIO_SOURCE@`.
+5. **No se tocó ningún archivo de Nix por este bug**: es 100% estado en
+   vivo de WirePlumber/Noctalia (fuera del repo), no una mala
+   configuración declarativa -- no había nada que "arreglar" en
+   `modules/desktop.nix`.
