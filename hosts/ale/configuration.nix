@@ -17,6 +17,7 @@
   #   boot.loader.grub.device = "/dev/sdX";  # disco completo, no partición
   # y quita las dos líneas de systemd-boot/efi de abajo.
   boot.loader.systemd-boot.enable = true;
+  boot.loader.systemd-boot.configurationLimit = 5;
   boot.loader.efi.canTouchEfiVariables = true;
 
   # Sin esto no hay swap en absoluto (hardware-configuration.nix trae
