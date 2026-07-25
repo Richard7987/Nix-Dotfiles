@@ -24,6 +24,10 @@ hl.config({
     follow_mouse = 1,
     sensitivity = 0,
     touchpad = { natural_scroll = true },
+    -- Num Lock apagado en cada arranque de Hyprland (a propósito -- pedido
+    -- explícito, sin depender de si el firmware/EC de este equipo lo prende
+    -- por su cuenta antes de llegar acá).
+    numlock_by_default = false,
   },
 
   general = {

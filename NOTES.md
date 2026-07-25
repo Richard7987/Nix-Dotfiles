@@ -1868,3 +1868,194 @@ Aplicado por el usuario con `sudo nixos-rebuild switch --flake
 /nixdots#ale` (`Done.` sin errores). Mientras tanto se relanzó Noctalia
 en caliente (mismo loop, en background) para no dejar al usuario sin
 barra hasta el rebuild.
+
+## Trackpad automático según mouse externo + Num Lock apagado en cada arranque (2026-07-24)
+
+**Pedido:** que el trackpad se apague solo cuando haya un mouse externo
+conectado (y se prenda solo cuando no lo haya), y que Num Lock arranque
+siempre apagado.
+
+**Num Lock:** trivial -- Hyprland tiene la opción nativa
+`input.numlock_by_default`. Se agregó `numlock_by_default = false` al
+bloque `input` de `home/ale/hyprland.lua`.
+
+**Trackpad vs. mouse externo:** Hyprland NO tiene una opción nativa para
+esto -- es un pedido abierto sin resolver todavía en upstream
+(`hyprwm/Hyprland#2763`, confirmado en vivo por búsqueda, no de memoria).
+Se resolvió por fuera con `hyprctl keyword 'device[NAME]:enabled'
+true/false` (sintaxis confirmada contra discusiones reales de usuarios de
+Hyprland, no inventada), nuevo módulo `modules/input.nix`:
+
+- Un script (`pkgs.writeShellApplication "touchpad-mouse-sync"`,
+  shellcheck limpio corrido en vivo con `nix run nixpkgs#shellcheck`)
+  que lee `hyprctl -j devices`, busca el mouse cuyo nombre matchea
+  `touchpad` (case-insensitive -- heurística del naming típico de
+  libinput; si en el hardware real el trackpad se reporta con otro
+  nombre hay que ajustar el regex, marcado `AJUSTAR` en el módulo) y lo
+  apaga si hay algún otro `mouse` en la lista, lo prende si no.
+- Una regla udev (`services.udev.extraRules`) que dispara un servicio
+  systemd oneshot (`touchpad-mouse-sync.service`) en cada add/remove de
+  cualquier dispositivo de input -- no se filtró por
+  `ENV{ID_INPUT_MOUSE}` porque udev no garantiza conservar esa propiedad
+  en el evento `remove` de un dispositivo ya desconectado; el script es
+  idempotente así que disparos de más (ej. al conectar un teclado) no
+  hacen nada raro.
+- El script corre como root desde el servicio systemd (itera
+  `/run/user/*/hypr/*/` y usa `runuser` para hablarle al socket de la
+  sesión de Hyprland del usuario dueño), pero también se invoca
+  directamente (sin `runuser`) desde un segundo `hl.on("hyprland.start",
+  ...)` en `hyprland.lua` -- necesario porque un mouse ya conectado
+  ANTES de que Hyprland arranque generó su evento udev "add" durante el
+  boot, mucho antes de que el socket de Hyprland existiera para
+  recibirlo, así que la regla udev sola no cubre el estado inicial de la
+  sesión.
+
+Verificado: `nix-instantiate --parse modules/input.nix`, `nix eval
+.#nixosConfigurations.ale.config.system.build.toplevel.drvPath` (evalúa
+sin errores con el nuevo módulo importado en
+`hosts/ale/configuration.nix`), sintaxis Lua de `hyprland.lua` cargada
+con `nix shell nixpkgs#lua5_4 -c lua -e "loadfile(...)"`.
+
+### Verificación en hardware real tras el rebuild -- 1 bug real encontrado y corregido
+
+`sudo nixos-rebuild switch --flake /nixdots#ale` aplicó sin errores.
+`hyprctl getoption input:numlock_by_default` confirmó `bool: false` --
+Num Lock ok. `hyprctl devices | grep -i -B2 touchpad` mostró el nombre
+real del trackpad de esta laptop: `syna7db5:01-06cb:cd41-touchpad` --
+contiene "touchpad", así que el regex del script matchea tal cual, sin
+necesidad de ajustarlo.
+
+Al probar el servicio a mano (`sudo systemctl start
+touchpad-mouse-sync.service`) falló: `status=127`,
+`journalctl -xeu touchpad-mouse-sync.service` mostró `getent: command
+not found`. Causa: `writeShellApplication` arma un `PATH` acotado
+estrictamente a `runtimeInputs` (más lo poco que systemd le da por
+default a un servicio), y `getent` -- usado para resolver el dueño
+(usuario) de cada sesión de Hyprland activa a partir de su UID -- no
+viene incluido ni en `jq`, ni en `util-linux`, ni en el paquete de
+Hyprland. En nixpkgs, `getent` vive en un output aparte de glibc
+(`pkgs.glibc.getent`, confirmado con `nix eval --raw
+nixpkgs#glibc.getent.outPath` -- ni `pkgs.glibc` ni `pkgs.glibc.bin` lo
+traen). **Fix:** se agregó `pkgs.glibc.getent` a `runtimeInputs` en
+`modules/input.nix`.
+
+### Segundo bug real, corregido: `hyprctl keyword` no existe para este setup (config Lua)
+
+Con el fix de `getent` aplicado, el servicio corrió sin código de
+salida de error, pero no hizo lo que debía: el log mostró `keyword
+can't work with non-legacy parsers. Use eval.` -- `hyprctl keyword
+device[NAME]:enabled ...` (la sintaxis "estándar" que aparece en casi
+toda la documentación/discusiones de Hyprland sobre este tema, y la que
+se usó en el primer intento) solo funciona con el parser legacy de
+`hyprland.conf`. Este setup usa el config manager **Lua**
+(`hyprland.lua`, ver decisión documentada al principio de este
+archivo), que es un parser distinto -- confirmado leyendo el fuente
+real de Hyprland (no de memoria, ni de la doc/discusiones que sí
+alucinaban que `keyword` funcionaba igual):
+`src/debug/HyprCtl.cpp::evalRequest()` (comando `hyprctl eval <código
+lua>`, corre el código con acceso al namespace `hl`) y
+`src/config/lua/bindings/LuaBindingsConfigRules.cpp::hlDevice()` (la
+función `hl.device({ name=..., ... })`, con `enabled` como uno de los
+campos válidos declarados en `DEVICE_FIELDS`).
+
+**Fix:** se reemplazó la línea de `hyprctl keyword ...` en el script
+por `hyprctl eval "hl.device({ name = \"$touchpad\", enabled =
+$enabled })"`. `enabled`/`$enabled` es literal `true`/`false` (booleano
+Lua sin comillas), no un string. Re-verificado: `nix eval
+.#nixosConfigurations.ale...toplevel.drvPath` sin errores, shellcheck
+limpio con `nix run nixpkgs#shellcheck` sobre el script ya con este
+cambio.
+
+Con `getent` + `hyprctl eval` corregidos, el rebuild se aplicó y el
+servicio corrió sin error (`ok` en el journal) tanto al conectar como
+al desconectar el mouse real (Razer Basilisk V3 Pro, USB) del usuario.
+Pero el usuario reportó: trackpad seguía sin funcionar después de
+desconectar el mouse.
+
+### Tercer bug real, corregido: la heurística de "mouse externo" contaba una interfaz del propio trackpad
+
+`hyprctl devices | sed -n '/^mice:/,/^Keyboards:/p'` con el mouse YA
+desconectado mostró 2 entradas, no 1:
+
+```
+syna7db5:01-06cb:cd41-mouse       <- el propio trackpad expone TAMBIÉN esto
+syna7db5:01-06cb:cd41-touchpad    <- el trackpad "real" (el que el script detecta con el regex)
+```
+
+El trackpad Synaptics RMI de esta laptop se registra en libinput/
+Hyprland como DOS dispositivos `.mice[]` distintos -- uno con capacidad
+"touchpad" y otro con capacidad "mouse" (pass-through/legacy) del MISMO
+hardware físico, y el segundo queda siempre presente,
+independientemente de si hay o no un mouse externo conectado. La
+lógica original del script (`other_mice = cualquier .mice[] con nombre
+!= al del touchpad`) contaba esa segunda interfaz del propio trackpad
+como si fuera un mouse externo -- `other_mice` nunca daba 0, así que el
+trackpad quedaba apagado para siempre en cuanto se conectaba un mouse
+una vez, sin importar que después se desconectara.
+
+**Fix:** se agrupan los dispositivos por "familia de hardware" en vez
+de por nombre exacto -- el nombre sin su último segmento separado por
+`-` (`sub("-[^-]*$"; "")`): `"syna7db5:01-06cb:cd41-touchpad"` y
+`"...-mouse"` colapsan a la misma familia `"syna7db5:01-06cb:cd41"`, así
+que ya no se cuentan entre sí. Un mouse externo real (ej.
+`razer-basilisk-v3-pro-1` / `razer-basilisk-v3-pro-keyboard-1`, el
+Razer del usuario también expone dos interfaces por su propia cuenta,
+por las teclas extra) tiene una familia completamente distinta y sigue
+contando normal. Verificado con `jq` real contra JSON armado a mano con
+los nombres reales observados en esta laptop: family-grouping da `0`
+sin el Razer conectado (ambas entradas del synaptics colapsan a la
+misma familia) y `2` con el Razer conectado (sus dos interfaces, más la
+del touchpad, todas cuentan aparte). Re-verificado tras el cambio: `nix
+eval .#nixosConfigurations.ale...toplevel.drvPath` sin errores,
+shellcheck limpio.
+
+**Pendiente:** el usuario tiene que volver a correr `sudo
+nixos-rebuild switch --flake /nixdots#ale` para aplicar este tercer
+fix, y recién ahí volver a probar con el mouse real
+conectado/desconectado (prueba física: tocar el trackpad, no solo
+mirar el journal -- `enabled` no se expone en `hyprctl devices -j`).
+
+### Cuarto problema, sin resolver: `hyprctl devices` seguía listando el Razer después de un unplug físico real -- REVERTIDO a pedido del usuario
+
+Con el fix de "familia" aplicado, el usuario sacó el dongle/cable USB
+del Razer del puerto (confirmado explícitamente: desconexión física
+real, no solo apagar el mouse) y el trackpad seguía sin responder.
+`hyprctl devices | sed -n '/^mice:/,/^Keyboards:/p'` en ese momento
+TODAVÍA mostraba `razer-basilisk-v3-pro-keyboard-1` y
+`razer-basilisk-v3-pro-1` en la lista -- es decir, Hyprland seguía
+viendo el mouse como conectado pese al unplug físico. Esto es
+consistente con mi lógica del script (que dependía de que el
+dispositivo desapareciera de `.mice[]`), no con un cuarto bug del
+script en sí -- el problema está un nivel más abajo (¿Hyprland no
+limpia `m_pointers` para este dispositivo compuesto en particular?
+¿kernel/udev no mandó el remove? no se llegó a diagnosticar: se pidió
+`lsusb`/`/proc/bus/input/devices` con el dongle desconectado para
+distinguir kernel vs. Hyprland, pero antes de tener esa respuesta el
+usuario pidió revertir todo ("mejor deja como estaba lo de el mouse y
+trackpad").
+
+**Revertido:** se borró `modules/input.nix`, se sacó su import de
+`hosts/ale/configuration.nix`, y se sacó el segundo
+`hl.on("hyprland.start", ...)` (el que llamaba a `touchpad-mouse-sync`)
+de `hyprland.lua` -- **se dejó** `numlock_by_default = false` en el
+bloque `input`, que sí quedó confirmado funcionando bien
+(`hyprctl getoption input:numlock_by_default` → `bool: false`) y no
+tuvo nada que ver con el problema. Se corrió `hyprctl eval
+'hl.device({ name = "syna7db5:01-06cb:cd41-touchpad", enabled = true
+})'` en caliente para devolverle el trackpad al usuario sin esperar un
+rebuild (cambio de runtime, no persiste solo -- ya no hace falta
+porque el próximo rebuild aplica el revert de todos modos, pero servía
+para no dejarlo sin trackpad mientras tanto). Re-verificado tras el
+revert: `nix eval .#nixosConfigurations.ale...toplevel.drvPath` sin
+errores.
+
+**Si se retoma esto en el futuro:** antes de rearmar el mecanismo de
+udev+hyprctl, diagnosticar primero por qué el Razer (dongle USB
+compuesto, dos interfaces HID) no desaparece de `hyprctl devices` tras
+un unplug físico real -- comparar `lsusb`/`cat
+/proc/bus/input/devices` (nivel kernel) contra `hyprctl devices` (nivel
+Hyprland) en el momento exacto del unplug, con el dongle realmente
+afuera, para saber si el problema es udev/kernel (el dongle no manda
+remove, quizás por firmware/quirk propio del receptor 2.4GHz de Razer)
+o un bug de limpieza de `m_pointers` específico de Hyprland para
+dispositivos HID compuestos.
