@@ -1807,3 +1807,64 @@ sin unidades fallidas persistentes).
   `ecosystem.no_update_news` como `boolean`), no adivinada. Sintaxis
   verificada cargando el archivo con `lua5.4` (`loadfile`, sin
   ejecutar) sin errores.
+
+## Segundo cuelgue de Noctalia en el mismo día: SIGSEGV real, y por qué no se relanzaba solo (2026-07-24)
+
+### Diagnóstico: no era el hang de PipeWire de la sección anterior
+
+Unas horas después del hang de PipeWire (~6 min, se recuperó solo)
+documentado arriba, Noctalia volvió a estar caída -- esta vez sin
+volumen, notificaciones ni barra, y sin que el proceso apareciera en
+`pgrep -a noctalia`. `~/.cache/noctalia/noctalia.log` terminaba en seco
+a las 17:44:26 sin ningún mensaje de error (el log normal no reporta
+sus propios crashes). La causa real se confirmó con
+`coredumpctl list --since="2026-07-24 17:00"`: un core real, señal
+`SIGSEGV`, PID 3934. `coredumpctl info` / el volcado adjunto al log del
+journal mostró el stack del thread principal:
+`Node::propagateLayoutDirty` → `Node::markLayoutDirty` → una lambda de
+`WorkspacesWidget::rebuild` invocada por `AnimationManager::tick` →
+`Surface::processQueuedFrameWork`/`drainPendingFrameWork` →
+`MainLoop::run`. Es un use-after-free real dentro del binario de
+Noctalia (probablemente un `Node` que el rebuild del widget de
+workspaces ya liberó, pero un callback de animación en vuelo todavía le
+apunta) -- bug de C++ upstream, no relacionado a esta config ni al
+hang de PipeWire de la sección anterior, y no parcheable sin tocar el
+código fuente real de `noctalia-dev/noctalia` (no se intentó un parche
+a ciegas sin la línea real, a diferencia del parche real que sí se hizo
+antes para el bug de sonido, ver la sección de `noctalia-sound-disconnect.patch`
+más arriba).
+
+### BUG real, corregido: nada relanzaba Noctalia tras un crash -- se quedaba muerta el resto de la sesión
+
+`home/ale/hyprland.lua` lanzaba Noctalia una sola vez
+(`hl.on("hyprland.start", function() hl.exec_cmd("noctalia") end)`),
+sin ningún supervisor. Cuando el binario muere por este SIGSEGV, nada
+la vuelve a lanzar -- se confirmó que llevaba 33 minutos caída sin que
+nadie lo notara hasta que se revisó a pedido del usuario. Se evaluó la
+alternativa "oficial" del propio módulo de home-manager de Noctalia
+(`nix/home-module.nix` del input `noctalia`, real:
+`systemd.enable = lib.mkEnableOption ...` que arma un
+`systemd.user.services.noctalia` con `Restart = "on-failure"`, ligado a
+`config.wayland.systemd.target`) pero se descartó porque
+`systemctl --user is-active graphical-session.target` devuelve
+`inactive` en este sistema real -- nada activa ese target acá (no hay
+UWSM ni `dbus-update-activation-environment --systemd`), así que el
+servicio systemd jamás arrancaría. Esto confirma que la decisión previa
+documentada en `home.nix` (comentario junto a `programs.noctalia`, líneas
+~59-66) de no usar `systemd.enable` sigue siendo correcta hoy.
+
+**Fix aplicado:** se envolvió el `exec_cmd` en un loop de reinicio en
+`home/ale/hyprland.lua`:
+`hl.exec_cmd("sh -c 'while true; do noctalia; sleep 2; done'")`. Así,
+si el binario vuelve a crashear (el bug de arriba sigue sin fix
+upstream y va a volver a pasar), se relanza solo en vez de dejar la
+barra/panel/OSD muertos indefinidamente -- el mismo efecto práctico que
+`Restart=on-failure` de systemd, pero sin depender de
+`graphical-session.target`. Verificado: sintaxis Lua cargada con
+`nix shell nixpkgs#lua5_4 -c lua -e "loadfile(...)"` sin errores,
+`nix flake check --no-build` y build completo de
+`nixosConfigurations.ale.config.system.build.toplevel` sin errores.
+Aplicado por el usuario con `sudo nixos-rebuild switch --flake
+/nixdots#ale` (`Done.` sin errores). Mientras tanto se relanzó Noctalia
+en caliente (mismo loop, en background) para no dejar al usuario sin
+barra hasta el rebuild.

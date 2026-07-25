@@ -69,9 +69,16 @@ hl.gesture({
   action = "workspace",
 })
 
--- Lanza Noctalia (barra, panel, control center, OSD...) al arrancar Hyprland
+-- Lanza Noctalia (barra, panel, control center, OSD...) al arrancar Hyprland.
+-- Envuelto en un loop de reinicio: no hay systemd --user supervisando este
+-- proceso (graphical-session.target no se activa en este setup, ver la nota
+-- en home.nix sobre por qué programs.noctalia.systemd.enable no sirve acá),
+-- así que un crash del binario (ya pasó un SIGSEGV real, coredump
+-- confirmado en WorkspacesWidget/AnimationManager -- ver NOTES.md
+-- 2026-07-24) dejaba la barra/panel/OSD muertos por el resto de la sesión
+-- sin que nada lo relanzara.
 hl.on("hyprland.start", function()
-  hl.exec_cmd("noctalia")
+  hl.exec_cmd("sh -c 'while true; do noctalia; sleep 2; done'")
 end)
 
 -- Espacios de trabajo persistentes (1-5, siempre visibles aunque estén vacíos)
