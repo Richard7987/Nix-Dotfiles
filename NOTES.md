@@ -2261,13 +2261,16 @@ switch` en caliente -- hace falta reiniciar para que `btusb` se cargue
 de nuevo con `enable_autosuspend=0` (descargar el módulo a mano
 tumbaría el Bluetooth de la sesión en curso, así que no se hizo).
 
-**Pendiente de confirmar tras el reinicio del usuario**: si el corte no
-vuelve a aparecer con uso sostenido, queda confirmada la causa. Si
-vuelve a pasar igual, las pistas siguientes que salieron en la
-búsqueda (no investigadas todavía porque esta tenía más evidencia
-directa a favor) son: downgrade de `linux-firmware` o de `bluez` a una
-versión anterior (reportado en varios hilos de Arch con síntomas
-similares), y revisar si WirePlumber está cambiando de perfil A2DP a
-HFP/HSP sin una llamada activa (se buscó en el journal de esta sesión y
-no había ninguna mención de `hfp`/`hsp`/`headset`, así que por ahora
-descartado, pero vale re-chequear si el bug persiste).
+**Confirmado tras el reinicio del usuario.** Verificado en la máquina
+real: `cat /sys/module/btusb/parameters/enable_autosuspend` pasó de `Y`
+a `N` tras el reboot, y con eso activo el usuario reportó que el corte
+de audio ya no volvió a aparecer con uso sostenido de los AirPods --
+causa confirmada, no solo hipótesis. Si el corte reaparece más
+adelante (ej. tras una actualización de kernel/firmware que resetee
+algo), las pistas de respaldo que salieron en la búsqueda de esta ronda
+y no hizo falta investigar son: downgrade de `linux-firmware` o de
+`bluez` a una versión anterior (reportado en varios hilos de Arch con
+síntomas similares), y revisar si WirePlumber está cambiando de perfil
+A2DP a HFP/HSP sin una llamada activa (se buscó en el journal de esta
+sesión y no había ninguna mención de `hfp`/`hsp`/`headset`, así que por
+ahora descartado).
