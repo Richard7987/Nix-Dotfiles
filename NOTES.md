@@ -2178,3 +2178,96 @@ el mismo log una vez que el password ya no se pierde:
 bloqueó la sincronización final (`events.enc` sí se actualizó), no se
 investigó más a fondo. Si el calendario deja de sincronizar más adelante,
 empezar por ahí.
+
+## AirPods: audio se corta después de un rato de uso -- nueva pista real, distinta de la hipótesis térmica de la ronda #13 (2026-07-26)
+
+El usuario reportó que los AirPods se "traban" -- suena bien un rato y
+después queda mudo pese a seguir reproduciéndose algo -- pidiendo
+específicamente buscar en foros porque en Fedora/Arch (no recuerda cuál)
+no le pasaba con el mismo hardware.
+
+### Diagnóstico en vivo, con el corte pasando en el momento
+
+Con el corte ya ocurriendo, se descartó metódicamente contra el sistema
+real, no contra hipótesis:
+
+1. **No era un problema de negociación de códec ni de errores reportados
+   por PipeWire**: `bluetoothctl info` mostraba `Connected: yes`, el
+   códec activo era `sbc` (el fix de la ronda #13 sigue vigente), y
+   `pw-top` en vivo durante el corte mostraba el nodo `bluez_output...`
+   en estado `running`, `ERR: 0`, con `WAIT`/`BUSY` en microsegundos --
+   PipeWire creía que estaba mandando audio perfecto al sink de los
+   AirPods. Esto es la misma firma que en la ronda #13: el problema no
+   se ve desde la capa de PipeWire/WirePlumber.
+2. **AVRCP no tenía un media player por defecto** (`bluetoothctl` -> menú
+   `player` -> `show` -> "No default player available") en el momento
+   del corte -- anotado pero no tratado como causa, no hay evidencia de
+   que afecte la ruta de audio A2DP en sí (es la capa de control de
+   metadata/transporte, no el stream).
+3. **Fix temporal confirmado en vivo**: `bluetoothctl disconnect` +
+   `connect` del dispositivo (renegocia el transporte A2DP desde cero)
+   devolvió el sonido de inmediato. Confirmado con el usuario en vivo.
+   Pero el patrón se repite tras un rato de uso normal -- no es una
+   solución real, solo confirma que el transporte A2DP se puede
+   recuperar reconectando.
+
+### Hallazgo real: autosuspend de USB activado en el adaptador Bluetooth
+
+Revisado el adaptador real por sysfs (no adivinado): el Bluetooth de
+esta laptop (Intel AC9560, combo con el WiFi) cuelga de un puerto USB
+interno -- `/sys/bus/usb/devices/1-14/`, `idVendor`/`idProduct`
+`8087:0aaa` (confirmado, es el mismo `hci0` de los AirPods). Ese
+dispositivo tenía `power/control: auto` y
+`power/autosuspend_delay_ms: 2000` -- autosuspend de USB activo por
+default, y `cat /sys/module/btusb/parameters/enable_autosuspend`
+confirmaba `Y` a nivel del módulo `btusb`.
+
+Es un problema ampliamente documentado en foros de Arch/Fedora para
+adaptadores Bluetooth sobre `btusb` (búsqueda web hecha en esta ronda):
+el bus USB puede suspender el controlador en medio de un stream A2DP
+activo -- el link Bluetooth en sí sigue "conectado" y PipeWire sigue
+escribiendo al socket del transporte sin ver ningún error (exactamente
+lo observado en el punto 1), pero el audio real deja de salir porque el
+propio controlador USB quedó suspendido. Esto explicaría también, en
+retrospectiva, el patrón sin resolver de la ronda #13 (el audio se
+degradaba tras uso sostenido con sbc *y* con aac por igual, algo que no
+tiene sentido si fuera un problema de códec pero sí si el bus USB
+entero se está suspendiendo periódicamente) -- la hipótesis térmica de
+esa ronda queda como secundaria, no descartada del todo pero con menos
+evidencia a favor que esta.
+
+Es consistente con que el usuario no vea este problema en Fedora/Arch
+con el mismo hardware: esas distros suelen traer reglas de udev o
+defaults de TLP que excluyen IDs de Bluetooth conocidos de autosuspend
+agresivo; el módulo de Bluetooth de NixOS (`hardware.bluetooth`) no
+toca ninguna política de energía de USB.
+
+**Fix aplicado** en `modules/desktop.nix`, junto a la config existente
+de Bluetooth:
+
+```nix
+boot.extraModprobeConfig = ''
+  options btusb enable_autosuspend=0
+'';
+```
+
+Preferido sobre una regla de `udev` atada al path del bus (`1-14`, que
+puede cambiar entre reinicios) porque el parámetro de módulo aplica a
+`btusb` en general sin depender de la enumeración USB. Validado con
+`nix build .#nixosConfigurations.ale.config.system.build.toplevel`
+(sin sudo, sin errores) antes de aplicar. Como es un parámetro de
+módulo del kernel, no toma efecto completo con un `nixos-rebuild
+switch` en caliente -- hace falta reiniciar para que `btusb` se cargue
+de nuevo con `enable_autosuspend=0` (descargar el módulo a mano
+tumbaría el Bluetooth de la sesión en curso, así que no se hizo).
+
+**Pendiente de confirmar tras el reinicio del usuario**: si el corte no
+vuelve a aparecer con uso sostenido, queda confirmada la causa. Si
+vuelve a pasar igual, las pistas siguientes que salieron en la
+búsqueda (no investigadas todavía porque esta tenía más evidencia
+directa a favor) son: downgrade de `linux-firmware` o de `bluez` a una
+versión anterior (reportado en varios hilos de Arch con síntomas
+similares), y revisar si WirePlumber está cambiando de perfil A2DP a
+HFP/HSP sin una llamada activa (se buscó en el journal de esta sesión y
+no había ninguna mención de `hfp`/`hsp`/`headset`, así que por ahora
+descartado, pero vale re-chequear si el bug persiste).

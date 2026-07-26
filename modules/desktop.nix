@@ -36,6 +36,24 @@
     "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -E -f /etc/bluetooth/main.conf"
   ];
 
+  # El adaptador Bluetooth de esta máquina (Intel AC9560, combo con el WiFi)
+  # cuelga del bus USB interno (confirmado: `/sys/bus/usb/devices/1-14/`,
+  # idVendor 8087:0aaa) con autosuspend USB activado por default
+  # (`power/control: auto`, `power/autosuspend_delay_ms: 2000` -- confirmado
+  # leyendo el sysfs real de esta laptop). Diagnosticado en vivo (2026-07-26):
+  # el audio de los AirPods se corta a los pocos minutos de uso incluso con
+  # `bluez5.codecs` ya restringido a sbc/aac (ver más arriba) y sin xruns ni
+  # errores reportados por PipeWire (`pw-top` con `ERR: 0` durante el corte)
+  # -- consistente con el bus USB suspendiendo el controlador Bluetooth en
+  # medio del stream A2DP y no con un problema de códec/negociación. Este es
+  # un problema ampliamente documentado para adaptadores Intel combo con
+  # `btusb` (ver foros de Arch/Fedora sobre `enable_autosuspend` de btusb).
+  # Deshabilitarlo a nivel de módulo del kernel es más robusto que una regla
+  # de udev atada al path del bus (que puede cambiar entre reinicios).
+  boot.extraModprobeConfig = ''
+    options btusb enable_autosuspend=0
+  '';
+
   # --- Audio (pipewire) — necesario para que los atajos wpctl del hyprland.lua funcionen ---
   security.rtkit.enable = true;
   services.pulseaudio.enable = false; # renombrado desde hardware.pulseaudio (confirmado con nix eval real)
