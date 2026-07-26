@@ -92,6 +92,19 @@
         templates.community_ids = [ "yazi" ];
       };
       wallpaper.directory = "${config.home.homeDirectory}/Pictures/Wallpapers/gruvbox";
+
+      # --- Plugin screen_recorder: capturar por monitor en vez de portal ---
+      # Con el default (video_source = "portal") gpu-screen-recorder falla en
+      # este equipo: "Recording failed" en pantalla, y en
+      # ~/.cache/noctalia/noctalia.log aparece
+      # "gsr_pipewire_video_create_egl_image_with_fallback: failed to create
+      # egl image with modifier ..." seguido de "no more input formats" y
+      # timeout de negociación PipeWire -- problema conocido de
+      # gpu-screen-recorder + portal en Nvidia propietario (PRIME sync,
+      # ver modules/graphics.nix). "focused" pasa -w <monitor> en vez de
+      # -w portal, capturando el output directo vía wlroots sin depender del
+      # portal/PipeWire (confirmado en recorder_service.luau del plugin).
+      plugin_settings."noctalia/screen_recorder".video_source = "focused";
       # Sin esto NO hay ningún agente de polkit corriendo (Hyprland/gamemode
       # solo activan el daemon de polkit, no un agente gráfico) -- acciones
       # con privilegios de apps GUI (ej. NetworkManager guardando una
@@ -376,14 +389,33 @@
       # la primera vez que se abre. allowUnfree ya está en true a nivel
       # sistema (hosts/ale/configuration.nix, por Nvidia/Steam) y
       # useGlobalPkgs = true lo hereda acá, así que no hace falta nada extra.
-    gpu-screen-recorder # dependencia del plugin oficial "screen_recorder" de Noctalia
-      # (noctalia-dev/official-plugins) -- el plugin solo hace de wrapper/IPC,
-      # busca este binario en PATH. El derivation de nixpkgs ya wrappea
-      # LD_LIBRARY_PATH con /run/opengl-driver/lib, que trae las libs NVENC
-      # de Nvidia gracias a hardware.graphics.enable + hardware.nvidia.* de
-      # modules/graphics.nix -- no hace falta ningún override extra. El
-      # portal (xdg-desktop-portal-hyprland) ya lo activa
-      # programs.hyprland.enable solo. El plugin en sí NO se declara acá --
-      # Noctalia v5 lo baja y activa en runtime (ver instrucción abajo).
+    # dependencia del plugin oficial "screen_recorder" de Noctalia
+    # (noctalia-dev/official-plugins) -- el plugin solo hace de wrapper/IPC,
+    # busca este binario en PATH. El derivation de nixpkgs ya wrappea
+    # LD_LIBRARY_PATH con /run/opengl-driver/lib, que trae las libs NVENC
+    # de Nvidia gracias a hardware.graphics.enable + hardware.nvidia.* de
+    # modules/graphics.nix. El portal (xdg-desktop-portal-hyprland) ya lo
+    # activa programs.hyprland.enable solo. El plugin en sí NO se declara
+    # acá -- Noctalia v5 lo baja y activa en runtime (ver instrucción abajo).
+    #
+    # SÍ hace falta un override puntual acá: environment.sessionVariables.
+    # LIBVA_DRIVER_NAME = "nvidia" (modules/graphics.nix) fuerza VAAPI a
+    # cargar el driver de Nvidia sin importar qué dispositivo se abra.
+    # video_source=focused (ver programs.noctalia.settings.plugin_settings
+    # más arriba) hace que gpu-screen-recorder capture vía KMS en el nodo
+    # que de verdad maneja la pantalla interna en modo PRIME sync --
+    # /dev/dri/renderD128, la iGPU Intel -- y ahí esa variable forzada rompe
+    # vaInitialize (confirmado en vivo: "vaInitialize failed" /
+    # "failed to query supported video codecs for device
+    # /dev/dri/renderD128" en el log de Noctalia). El wrapper solo
+    # desactiva esa variable para este binario puntual -- no toca el env
+    # global, así que el resto de las apps (navegador, mpv) siguen usando
+    # VAAPI de Nvidia como se pretendía.
+    (pkgs.gpu-screen-recorder.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
+      postFixup = (old.postFixup or "") + ''
+        wrapProgram $out/bin/gpu-screen-recorder --unset LIBVA_DRIVER_NAME
+      '';
+    }))
   ];
 }

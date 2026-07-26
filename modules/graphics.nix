@@ -23,6 +23,17 @@
   hardware.graphics = {
     enable = true;
     enable32Bit = true; # necesario para Steam/Proton
+
+    # VAAPI de la iGPU Intel -- sin esto, cualquier proceso que abra
+    # /dev/dri/renderD128 (el nodo Intel, dueño real de la pantalla interna
+    # en modo PRIME sync) y pida vaInitialize no tiene ningún driver que
+    # cargar. Confirmado en vivo: gpu-screen-recorder (grabación de pantalla
+    # vía Noctalia) fallaba con "vaInitialize failed" / "failed to query
+    # supported video codecs for device /dev/dri/renderD128" -- ver el
+    # wrapper en home/ale/home.nix sobre por qué esto solo no alcanzaba
+    # (environment.sessionVariables.LIBVA_DRIVER_NAME más abajo fuerza el
+    # driver de Nvidia incluso contra este nodo Intel).
+    extraPackages = [ pkgs.intel-media-driver ];
   };
 
   hardware.nvidia = {
