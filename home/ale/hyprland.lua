@@ -83,6 +83,10 @@ hl.gesture({
 -- sin que nada lo relanzara.
 hl.on("hyprland.start", function()
   hl.exec_cmd("sh -c 'while true; do noctalia; sleep 2; done'")
+  -- hypridle (bloqueo/dpms/suspensión por inactividad, ver services.hypridle
+  -- en home.nix): systemctl start en vez de exec_cmd("hypridle") a pelo para
+  -- reusar el unit generado por home-manager (Restart=always incluido).
+  hl.exec_cmd("systemctl --user start hypridle.service")
 end)
 
 -- Espacios de trabajo persistentes (1-5, siempre visibles aunque estén vacíos)
@@ -116,6 +120,10 @@ hl.bind(mainMod .. "+B", hl.dsp.exec_cmd("zen-beta")) -- canal "default" del fla
 hl.bind(mainMod .. "+Q", hl.dsp.window.close())
 hl.bind(mainMod .. "+F", hl.dsp.window.fullscreen())
 hl.bind(mainMod .. "+V", hl.dsp.window.float({ action = "toggle" }))
+
+-- Mover/redimensionar arrastrando con el mouse (SUPER + click izq/der)
+hl.bind(mainMod .. "+mouse:272", hl.dsp.window.drag(),   { mouse = true })
+hl.bind(mainMod .. "+mouse:273", hl.dsp.window.resize(), { mouse = true })
 
 -- --- Atajos de Noctalia (launcher / control center / settings) ---
 -- Comando IPC real confirmado contra docs.noctalia.dev/v5/compositor-settings/hyprland

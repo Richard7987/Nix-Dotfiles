@@ -110,6 +110,47 @@
   # --- Hyprland: config en Lua (ver home/ale/hyprland.lua) ---
   xdg.configFile."hypr/hyprland.lua".source = ./hyprland.lua;
 
+  # --- hypridle: bloqueo/apagado de pantalla/suspensión automáticos por
+  # inactividad ---
+  # Noctalia no trae su propia pantalla de bloqueo con temporizador de idle;
+  # solo expone el comando manual "noctalia msg session lock" (el mismo que
+  # ya usa mainMod+L en hyprland.lua, confirmado que funciona contra la doc
+  # de Noctalia). hypridle solo dispara ESE mismo comando por inactividad, en
+  # vez de agregar un segundo mecanismo de lock (ej. hyprlock) que compita
+  # con el que ya está confirmado.
+  # El módulo de home-manager solo escribe hypridle.conf y crea el
+  # systemd.user.service -- lo arranca vía WantedBy=graphical-session.target,
+  # que en este setup NO se activa (mismo problema ya documentado arriba para
+  # Noctalia). Por eso el arranque real va en hyprland.lua, junto al de
+  # Noctalia (ver hl.on("hyprland.start", ...)), con `systemctl --user start`
+  # para reusar el unit generado (Restart=always incluido) en vez de otro
+  # loop manual.
+  services.hypridle = {
+    enable = true;
+    settings = {
+      general = {
+        lock_cmd = "noctalia msg session lock";
+        before_sleep_cmd = "noctalia msg session lock";
+        after_sleep_cmd = "hyprctl dispatch dpms on";
+      };
+      listener = [
+        {
+          timeout = 300; # 5 min sin actividad -> bloquear
+          on-timeout = "noctalia msg session lock";
+        }
+        {
+          timeout = 330; # ~30s después del lock -> apagar pantalla (batería del laptop)
+          on-timeout = "hyprctl dispatch dpms off";
+          on-resume = "hyprctl dispatch dpms on";
+        }
+        {
+          timeout = 900; # 15 min sin actividad -> suspender
+          on-timeout = "systemctl suspend";
+        }
+      ];
+    };
+  };
+
   # --- GPG / YubiKey ---
   # Opciones verificadas contra el módulo real de home-manager
   # (programs/gpg.nix y services/gpg-agent.nix).
