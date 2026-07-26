@@ -103,7 +103,34 @@
   programs.noctalia = {
     enable = true;
     recommendedServices.enable = true;
+    # Override puntual sobre el default (lib.mkDefault del propio flake de
+    # noctalia) para incluir el cherry-pick del bug de password de CalDAV --
+    # ver pkgs/noctalia-patched.nix para el detalle completo.
+    package = import ../pkgs/noctalia-patched.nix { inherit inputs pkgs; };
   };
+
+  # Noctalia guarda credenciales durables (password de cuentas CalDAV,
+  # tokens de Google Calendar, la master key del cache cifrado) a través de
+  # libsecret (src/security/secret_store.cpp del propio noctalia -- única
+  # implementación de SecretStoreBackend es LibsecretBackend, que llama
+  # secret_service_get_sync() contra org.freedesktop.secrets por D-Bus). Sin
+  # ESTO no hay ningún proveedor de Secret Service corriendo en el sistema
+  # -- confirmado en ~/.cache/noctalia/noctalia.log:
+  # "[secret-store] ... status=unavailable category=provider-unavailable" y
+  # "[calendar] calendar credential migration is pending" repitiéndose sin
+  # parar -- así que la cuenta CalDAV de Nextcloud (agregada en
+  # [calendar.account.home_nextcloud] de settings.toml, server/usuario
+  # correctos) nunca llega a autenticarse y el calendario queda vacío.
+  # gnome-keyring implementa ese Secret Service -- no hace falta estar en
+  # GNOME para usarlo, es el backend estándar también en setups
+  # Hyprland/wlroots. El módulo de greetd de nixpkgs
+  # (nixos/modules/services/display-managers/greetd.nix) ya conecta
+  # `security.pam.services.greetd.enableGnomeKeyring` a este mismo booleano
+  # por default (`lib.mkDefault config.services.gnome.gnome-keyring.enable`)
+  # -- y noctalia-greeter (nix/nixos-module.nix del input) configura
+  # `services.greetd` por debajo -- así que con esta única línea el keyring
+  # queda auto-unlockeado con el password de login, sin tocar PAM a mano.
+  services.gnome.gnome-keyring.enable = true;
 
   # --- Noctalia Greeter ---
   # Greeter oficial hecho para Noctalia: usa greetd + un compositor wlroots

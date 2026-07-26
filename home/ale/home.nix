@@ -76,6 +76,13 @@
 
   programs.noctalia = {
     enable = true;
+    # Mismo override que en modules/desktop.nix (nivel NixOS) -- este es el
+    # que realmente importa acá porque este cfg.package termina en
+    # home.packages (ver nix/home-module.nix del input noctalia), que es de
+    # donde el loop de exec-once de hyprland.lua toma el binario `noctalia`
+    # del PATH (systemd.enable sigue en false, ver comentario arriba). Ver
+    # pkgs/noctalia-patched.nix para el detalle del bug parcheado.
+    package = import ../../pkgs/noctalia-patched.nix { inherit inputs pkgs; };
     settings = {
       theme = {
         mode = "dark";

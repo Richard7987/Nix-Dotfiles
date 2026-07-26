@@ -2059,3 +2059,122 @@ afuera, para saber si el problema es udev/kernel (el dongle no manda
 remove, quizás por firmware/quirk propio del receptor 2.4GHz de Razer)
 o un bug de limpieza de `m_pointers` específico de Hyprland para
 dispositivos HID compuestos.
+
+## CalDAV de Nextcloud no sincronizaba en el calendario de Noctalia: tres bugs en cadena (2026-07-25)
+
+Pedido del usuario: había agregado la cuenta CalDAV de su Nextcloud
+(`cloud.richard69.lat`) en los ajustes de Noctalia pero el calendario nunca
+mostraba eventos. Terminó siendo una cadena de tres bugs independientes,
+cada uno tapando al siguiente -- ninguno relacionado con la config de
+`/nixdots` en sí (server_url/username de la cuenta siempre estuvieron bien).
+
+### Bug 1: no había ningún proveedor de Secret Service en el sistema
+
+Noctalia guarda credenciales durables (password CalDAV, tokens de Google
+Calendar, master key del cache cifrado) exclusivamente vía libsecret
+(`src/security/secret_store.cpp` del propio noctalia -- confirmado leyendo
+el código real: la única implementación de `SecretStoreBackend` es
+`LibsecretBackend`, que llama `secret_service_get_sync()` contra
+`org.freedesktop.secrets` por D-Bus; no hay fallback a archivo plano pese a
+que un resultado de búsqueda de terceros lo sugería -- no era cierto contra
+el código real). En este sistema nunca se había instalado/activado ningún
+keyring (`pgrep`/`busctl --user list` no mostraban nada, cero referencias a
+gnome-keyring/kwallet/libsecret en todo `/nixdots`). Por eso
+`~/.cache/noctalia/noctalia.log` repetía sin parar
+`[secret-store] ... status=unavailable category=provider-unavailable` y
+`[calendar] calendar credential migration is pending` -- la contraseña
+nunca llegaba a guardarse.
+
+**Fix:** `services.gnome.gnome-keyring.enable = true;` en
+`modules/desktop.nix`. Una sola línea alcanza porque
+`programs.noctalia-greeter` configura `services.greetd` por debajo, y el
+propio módulo de greetd de nixpkgs
+(`nixos/modules/services/display-managers/greetd.nix`) ya conecta
+`security.pam.services.greetd.enableGnomeKeyring` a ese mismo booleano por
+default (`lib.mkDefault config.services.gnome.gnome-keyring.enable`) --
+confirmado leyendo el nixpkgs real vía `builtins.getFlake`, no de memoria.
+Para no esperar un logout completo en la sesión donde se diagnosticó esto,
+se arrancó el keyring a mano replicando lo que hace PAM
+(`gnome-keyring-daemon --login --components=secrets,pkcs11,ssh` leyendo el
+password de login por stdin) -- confirmado con `busctl --user list | grep
+secret` que `org.freedesktop.secrets` quedó registrado en el bus de sesión
+sin relogin.
+
+### Bug 2: `.well-known/caldav` de Nextcloud redirigía a `http://`, no `https://`
+
+Con el keyring ya andando, el discovery seguía fallando. `curl -I
+https://cloud.richard69.lat/.well-known/caldav` mostraba un 301 a
+`http://cloud.richard69.lat/remote.php/dav/` -- el proxy (Cloudflare Tunnel)
+termina TLS y el contenedor de Nextcloud solo ve HTTP plano, así que las
+reglas de `mod_rewrite` armaban el redirect absoluto con el esquema
+equivocado. La mayoría de clientes CalDAV (razonablemente) se niegan a
+seguir un redirect que baja de HTTPS a HTTP sin cifrar, así que la
+resolución fallaba en seco apenas se usaba la URL corta
+(`https://cloud.richard69.lat`, dejando que Noctalia auto-descubra la ruta
+vía well-known) en vez de la ruta completa a mano
+(`.../remote.php/dav`).
+
+**Fix:** aplicado por el usuario del lado del servidor (fuera de
+`/nixdots`, en el propio host de Nextcloud vía otra sesión de Claude Code):
+`RewriteCond %{HTTP:X-Forwarded-Proto} =https` antes de las reglas de
+`.well-known/caldav` y `.well-known/carddav` en el `.htaccess` de
+Nextcloud, para construir el redirect en `https://` cuando Cloudflare
+confirma que la conexión original fue HTTPS. Verificado desde acá con
+`curl` tras el fix: el 301 ya apunta a `https://.../remote.php/dav/` y la
+cadena completa termina en 401 (esperado, pide auth).
+
+### Bug 3: bug real de Noctalia -- el password se perdía justo antes del discovery (upstream, sin mergear)
+
+Con el keyring y el redirect ya arreglados, seguía apareciendo
+`[calendar-caldav-discovery] missing server_url/username/password` en cada
+intento, pese a que `settings.toml` tenía `server_url`/`username` bien
+puestos y el keyring devolvía el password sin problema. Rastreado hasta
+`noctalia-dev/noctalia#3629` (PR abierta, no mergeada al momento de
+escribir esto): en `fetchCalDav`
+(`src/calendar/calendar_service.cpp`), `discoverCalDavCollections()` recibe
+`password` como argumento posicional y el lambda que se pasa como
+argumento siguiente lo captura con `password = std::move(password)` -- el
+orden de evaluación de argumentos de función en C++ no está garantizado,
+así que el `move` del capture podía ejecutarse antes de que se copiara el
+argumento posicional, dejando el password ya vaciado cuando
+`discoverCalDavCollections()` lo leía.
+
+**Fix:** cherry-pick del diff de la PR (commit
+`96a35df5e44e4225141a9d9932d59ba28fbb7bc6`,
+`floydya/noctalia#fix/caldav-password-ownership`) como patch local --
+`pkgs/noctalia-caldav-password-fix.patch` +
+`pkgs/noctalia-patched.nix` (`overrideAttrs` sobre
+`inputs.noctalia.packages.${system}.default`, agregando el patch a
+`patches`). Wireado en **los dos** lugares donde hace falta:
+`programs.noctalia.package` en `modules/desktop.nix` (nivel NixOS) y en
+`home/ale/home.nix` (nivel home-manager) -- este segundo es el que importa
+de verdad acá, porque Noctalia en este setup no corre como servicio
+systemd (`systemd.enable = false` a propósito, ver comentario ya existente
+en `home.nix`) sino que el loop `while true; do noctalia; sleep 2; done` de
+`hyprland.lua` lanza el binario `noctalia` del PATH, y ese PATH lo arma
+`home.packages` (vía `cfg.package` del módulo home-manager de noctalia).
+Ambos deben apuntar al mismo paquete parcheado para evitar dos builds
+distintos de noctalia en el sistema.
+
+Verificado en vivo, sin relogin: `nix build
+.#nixosConfigurations.ale.config.system.build.toplevel` compiló el C++ de
+noctalia con el patch aplicado sin errores, `sudo nixos-rebuild switch
+--flake .#ale`, y `kill <pid de noctalia>` (el loop de hyprland.lua lo
+relanza solo en ~2s tomando el binario nuevo del PATH -- no hace falta
+tocar el `sh` del loop en sí). Tras reingresar la cuenta una vez más,
+`~/.cache/noctalia/noctalia.log` dejó de repetir "missing
+server_url/username/password" y `~/.cache/noctalia/calendar/events.enc` se
+actualizó con timestamp fresco -- el calendario ya muestra eventos.
+
+**Nota de mantenimiento:** cuando `noctalia-dev/noctalia#3629` se mergee
+upstream y el `flake.lock` se actualice más allá de ese commit, borrar
+`pkgs/noctalia-patched.nix` y `pkgs/noctalia-caldav-password-fix.patch`, y
+volver `programs.noctalia.package` al default (`lib.mkDefault` del propio
+flake de noctalia) en ambos archivos.
+
+**De paso, quedó documentado un warning nuevo y aparentemente benigno** en
+el mismo log una vez que el password ya no se pierde:
+`[calendar-caldav-discovery] principal discovery failed http=405` -- no
+bloqueó la sincronización final (`events.enc` sí se actualizó), no se
+investigó más a fondo. Si el calendario deja de sincronizar más adelante,
+empezar por ahí.
