@@ -121,10 +121,9 @@
   programs.noctalia = {
     enable = true;
     recommendedServices.enable = true;
-    # Override puntual sobre el default (lib.mkDefault del propio flake de
-    # noctalia) para incluir el cherry-pick del bug de password de CalDAV --
-    # ver pkgs/noctalia-patched.nix para el detalle completo.
-    package = import ../pkgs/noctalia-patched.nix { inherit inputs pkgs; };
+    # El cherry-pick del fix de password de CalDAV (pkgs/noctalia-patched.nix)
+    # ya fue mergeado en upstream desde noctalia 5.0.0 (2026-07-26, ver
+    # NOTES.md) -- el paquete default del flake ya trae el fix, sin override.
   };
 
   # Noctalia guarda credenciales durables (password de cuentas CalDAV,

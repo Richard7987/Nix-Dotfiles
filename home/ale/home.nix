@@ -76,13 +76,9 @@
 
   programs.noctalia = {
     enable = true;
-    # Mismo override que en modules/desktop.nix (nivel NixOS) -- este es el
-    # que realmente importa acá porque este cfg.package termina en
-    # home.packages (ver nix/home-module.nix del input noctalia), que es de
-    # donde el loop de exec-once de hyprland.lua toma el binario `noctalia`
-    # del PATH (systemd.enable sigue en false, ver comentario arriba). Ver
-    # pkgs/noctalia-patched.nix para el detalle del bug parcheado.
-    package = import ../../pkgs/noctalia-patched.nix { inherit inputs pkgs; };
+    # El cherry-pick del fix de password de CalDAV (pkgs/noctalia-patched.nix)
+    # ya fue mergeado en upstream desde noctalia 5.0.0 (2026-07-26, ver
+    # NOTES.md) -- el paquete default del flake ya trae el fix, sin override.
     settings = {
       theme = {
         mode = "dark";
@@ -225,11 +221,18 @@
       # puro" en NOTES.md 2026-07-22) -- got commit no soporta firma, así
       # que este commit de flake.lock queda sin firmar (a diferencia de los
       # commits manuales de antes con git commit -S).
+      #
+      # Sin argumentos actualiza TODOS los inputs a la vez (comportamiento
+      # de siempre). Pasándole nombres de inputs (ej. `nixos-update nixpkgs`)
+      # actualiza solo esos -- útil para no mover inputs que no hacía falta
+      # tocar y así no perder el cache-hit de noctalia.cachix.org /
+      # psysonic.cachix.org en builds que de otra forma no habrían cambiado
+      # (ver auditoría 2026-07-26 en NOTES.md).
       nixos-update() {
         (
           set -e
           cd /nixdots
-          sudo nix flake update
+          sudo nix flake update "$@"
           sudo nixos-rebuild build --flake .#ale
           sudo nixos-rebuild switch --flake .#ale
           if [ -n "$(got status flake.lock)" ]; then

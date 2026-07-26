@@ -72,5 +72,16 @@
   # Paquete grande (varios GB). Quítalo si al final no haces ML/compute con la GPU.
   environment.systemPackages = with pkgs; [
     cudaPackages.cudatoolkit
+
+    # Diagnóstico gráfico: glxinfo (mesa-demos) y vulkaninfo (vulkan-tools),
+    # para confirmar en cualquier momento qué GPU está renderizando de verdad
+    # (relevante en PRIME sync, donde la Nvidia debería aparecer como
+    # renderer activo).
+    mesa-demos
+    vulkan-tools
+
+    # Minecraft Java Edition (el paquete `minecraft` de nixpkgs fue
+    # eliminado por estar roto; `prismlauncher` es el reemplazo recomendado).
+    prismlauncher
   ];
 }
