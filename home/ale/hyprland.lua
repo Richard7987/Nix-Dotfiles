@@ -83,10 +83,6 @@ hl.gesture({
 -- sin que nada lo relanzara.
 hl.on("hyprland.start", function()
   hl.exec_cmd("sh -c 'while true; do noctalia; sleep 2; done'")
-  -- hypridle (bloqueo/dpms/suspensión por inactividad, ver services.hypridle
-  -- en home.nix): systemctl start en vez de exec_cmd("hypridle") a pelo para
-  -- reusar el unit generado por home-manager (Restart=always incluido).
-  hl.exec_cmd("systemctl --user start hypridle.service")
 end)
 
 -- Espacios de trabajo persistentes (1-5, siempre visibles aunque estén vacíos)
@@ -134,6 +130,15 @@ hl.bind(mainMod .. "+Space", hl.dsp.exec_cmd(noctaliaMsg .. "panel-toggle launch
 hl.bind(mainMod .. "+S", hl.dsp.exec_cmd(noctaliaMsg .. "panel-toggle control-center"))
 hl.bind(mainMod .. "+comma", hl.dsp.exec_cmd(noctaliaMsg .. "settings-toggle"))
 hl.bind(mainMod .. "+L", hl.dsp.exec_cmd(noctaliaMsg .. "session lock"))
+
+-- Screenshots (ScreenshotService nativo de Noctalia -- ver idle/screenshot
+-- en home.nix sobre por qué no hace falta grim/slurp acá).
+hl.bind("Print", hl.dsp.exec_cmd(noctaliaMsg .. "screenshot-region"))
+hl.bind(mainMod .. "+Print", hl.dsp.exec_cmd(noctaliaMsg .. "screenshot-fullscreen pick"))
+
+-- Historial de portapapeles (panel nativo de Noctalia, shell.clipboard_enabled
+-- ya viene true por default -- ver comentario en home.nix)
+hl.bind(mainMod .. "+P", hl.dsp.exec_cmd(noctaliaMsg .. "panel-toggle clipboard"))
 
 -- --- Navegación de foco ---
 hl.bind(mainMod .. "+Left", hl.dsp.focus({ direction = "left" }))

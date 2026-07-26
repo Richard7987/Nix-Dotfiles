@@ -70,6 +70,16 @@
     "psysonic.cachix.org-1:M9cQyQ7tgvUWOQ5Pyt8ozlMoPLtOZir6MfRuTH9/VYA="
   ];
 
+  # Sin esto /nix/store solo crece: no había ningún GC programado, y
+  # boot.loader.systemd-boot.configurationLimit (ver más abajo) solo recorta
+  # el menú de arranque, no el store. Semanal + 14 días de margen para poder
+  # hacer rollback a una generación reciente si un rebuild sale mal.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 14d";
+  };
+
   environment.systemPackages = with pkgs; [
     git
     vim

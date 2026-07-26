@@ -104,52 +104,59 @@
       # tenemos i18n.defaultLocale = "es_MX.UTF-8" a nivel de sistema
       # (hosts/ale/configuration.nix) -- confirmado que existe catálogo
       # es.json en assets/translations/, así que la UI sale en español sola.
+
+      # --- Idle: bloqueo/apagado de pantalla/suspensión por inactividad ---
+      # CORRECCIÓN: la ronda anterior agregó services.hypridle (systemd,
+      # externo) asumiendo que Noctalia no tenía nada propio. Falso --
+      # Noctalia trae su propio IdleManager nativo (src/idle/, sobre
+      # ext-idle-notify-v1, confirmado leyendo el fuente real de
+      # noctalia-shell 5.0.0) con exactamente este mismo propósito, vía
+      # [idle.behavior.*] en TOML (action = lock|screen_off|suspend|
+      # lock_and_suspend|command, ver example.toml del paquete). Usar el
+      # externo duplicaba el trabajo Y competía por la interfaz DBus
+      # org.freedesktop.ScreenSaver que Noctalia ya registra (confirmado en
+      # vivo: "[ERR] Another service is already providing the
+      # org.freedesktop.ScreenSaver interface" en el log de hypridle) --
+      # ver NOTES.md. Se saca hypridle (y su arranque en hyprland.lua) y se
+      # usa esto en su lugar: mismos timeouts, sin segundo daemon.
+      idle = {
+        behavior = {
+          lock = {
+            timeout = 300; # 5 min sin actividad -> bloquear
+            action = "lock";
+            enabled = true;
+          };
+          "screen-off" = {
+            timeout = 330; # ~30s después del lock -> apagar pantalla (batería del laptop)
+            action = "screen_off";
+            enabled = true;
+          };
+          suspend = {
+            timeout = 900; # 15 min sin actividad -> suspender
+            action = "suspend"; # lock_before_suspend default = true, ya bloquea antes de suspender
+            enabled = true;
+          };
+        };
+      };
+
+      # --- Screenshots ---
+      # No hacía falta agregar grim/slurp: Noctalia trae su propio
+      # ScreenshotService nativo (src/capture/, IPC "screenshot-region" /
+      # "screenshot-fullscreen", confirmado en el fuente). Los defaults de
+      # ScreenshotConfig ya sirven (saveToFile=true a ~/Pictures,
+      # copyToClipboard=true, freezeScreen=true), así que no se pisa nada
+      # acá -- solo faltan los binds, agregados en hyprland.lua.
+
+      # --- Clipboard ---
+      # Tampoco hacía falta cliphist: shell.clipboard_enabled ya es true por
+      # default (historial + panel "clipboard" nativos, confirmado en
+      # config_types.h). Solo faltaba el bind para abrir el panel, agregado
+      # en hyprland.lua (mainMod+P).
     };
   };
 
   # --- Hyprland: config en Lua (ver home/ale/hyprland.lua) ---
   xdg.configFile."hypr/hyprland.lua".source = ./hyprland.lua;
-
-  # --- hypridle: bloqueo/apagado de pantalla/suspensión automáticos por
-  # inactividad ---
-  # Noctalia no trae su propia pantalla de bloqueo con temporizador de idle;
-  # solo expone el comando manual "noctalia msg session lock" (el mismo que
-  # ya usa mainMod+L en hyprland.lua, confirmado que funciona contra la doc
-  # de Noctalia). hypridle solo dispara ESE mismo comando por inactividad, en
-  # vez de agregar un segundo mecanismo de lock (ej. hyprlock) que compita
-  # con el que ya está confirmado.
-  # El módulo de home-manager solo escribe hypridle.conf y crea el
-  # systemd.user.service -- lo arranca vía WantedBy=graphical-session.target,
-  # que en este setup NO se activa (mismo problema ya documentado arriba para
-  # Noctalia). Por eso el arranque real va en hyprland.lua, junto al de
-  # Noctalia (ver hl.on("hyprland.start", ...)), con `systemctl --user start`
-  # para reusar el unit generado (Restart=always incluido) en vez de otro
-  # loop manual.
-  services.hypridle = {
-    enable = true;
-    settings = {
-      general = {
-        lock_cmd = "noctalia msg session lock";
-        before_sleep_cmd = "noctalia msg session lock";
-        after_sleep_cmd = "hyprctl dispatch dpms on";
-      };
-      listener = [
-        {
-          timeout = 300; # 5 min sin actividad -> bloquear
-          on-timeout = "noctalia msg session lock";
-        }
-        {
-          timeout = 330; # ~30s después del lock -> apagar pantalla (batería del laptop)
-          on-timeout = "hyprctl dispatch dpms off";
-          on-resume = "hyprctl dispatch dpms on";
-        }
-        {
-          timeout = 900; # 15 min sin actividad -> suspender
-          on-timeout = "systemctl suspend";
-        }
-      ];
-    };
-  };
 
   # --- GPG / YubiKey ---
   # Opciones verificadas contra el módulo real de home-manager
