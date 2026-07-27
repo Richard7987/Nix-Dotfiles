@@ -2179,6 +2179,76 @@ bloqueó la sincronización final (`events.enc` sí se actualizó), no se
 investigó más a fondo. Si el calendario deja de sincronizar más adelante,
 empezar por ahí.
 
+## Continuación del bug del CalDAV: carrera en el arranque porque el password vivía en la colección equivocada del keyring (2026-07-27)
+
+Un día después del fix de la entrada anterior, el usuario reportó que el
+calendario volvió a no mostrar eventos. No era ninguno de los tres bugs ya
+resueltos -- keyring activo, redirect ya arreglado en Nextcloud, patch de
+Noctalia compilado -- sino un cuarto bug, nuevo, en la propia forma en la
+que el password había quedado guardado durante el debugging en vivo del
+día anterior.
+
+### Causa: el password quedó en `Default keyring`, no en `login`
+
+Inspeccionando las colecciones reales de Secret Service (`busctl --user
+tree org.freedesktop.secrets`, sin adivinar) aparecían tres: `login`
+(`Label = "Login"`, la que PAM desbloquea de forma sincrónica al loguearse
+vía `pam_gnome_keyring.so auto_start` en `/etc/pam.d/greetd`, confirmado
+real en este sistema), `session` (transitoria) y `Default_keyring` (una
+colección aparte). El alias `default` -- el que usa
+`secret_service_get_sync()` de libsecret cuando Noctalia no pide una
+colección específica -- apuntaba a `Default_keyring`
+(`ReadAlias "default"` lo confirmó), no a `login`. Ahí es donde había
+quedado guardado el password de `home_nextcloud` durante la sesión de
+debugging del día anterior (`Default_keyring/3`, atributos
+`application=noctalia owner=home_nextcloud scope=calendar`), junto con la
+master-key de storage de Noctalia, el `Chromium Safe Storage` y una
+credencial de Nextcloud de otra app (`org.gnome.keyring.NetworkPassword`,
+sin relación con Noctalia -- no tocada).
+
+`login` sí se desbloquea de inmediato al loguearse (confirmado con
+timestamps: sesión de greetd arrancó 12:33:17, `gnome-keyring-daemon`
+12:33:18), pero `Default_keyring` es una colección aparte que no forma
+parte de ese mismo paso atómico de PAM -- su registro en D-Bus quedaba
+listo un poco después. Noctalia consulta el password ~2s después de
+arrancar (`~/.cache/noctalia/noctalia.log`:
+`[calendar] caldav account home_nextcloud has no stored password` a las
+12:33:20), justo antes de que esa colección estuviera lista. Como
+Noctalia solo reintenta el fetch de credenciales cada ~15 min, el
+calendario podía quedarse sin sincronizar bastante rato después de cada
+login/reinicio -- y solo se destrababa si algo (p.ej. abrir el panel de
+calendario a mano) forzaba un nuevo intento antes de esos 15 min.
+
+### Fix: repuntar el alias `default` hacia `login`
+
+```
+busctl --user call org.freedesktop.secrets /org/freedesktop/secrets \
+  org.freedesktop.Secret.Service SetAlias so "default" \
+  /org/freedesktop/secrets/collection/login
+```
+
+Persiste solo (queda escrito en `~/.local/share/keyrings/default`,
+confirmado con `cat` tras el cambio: contiene `login`). A propósito no se
+tocó el password en texto plano por D-Bus para moverlo -- en vez de eso
+se le pidió al usuario reingresar el password una vez en los ajustes de
+Noctalia, que lo volvió a guardar y esta vez cayó en la colección correcta
+(`login/1`, mismos atributos que el original). Verificado matando el
+proceso de `noctalia` (el loop de `hyprland.lua` lo relanza solo): ya no
+apareció "no stored password" en el log, fue directo al warning ya
+conocido y benigno `principal discovery failed http=405`, y
+`~/.cache/noctalia/calendar/events.enc` se actualizó al instante del
+restart. Se borró el ítem duplicado que había quedado huérfano en
+`Default_keyring` (`Default_keyring/3`) una vez confirmado que el nuevo
+en `login` funcionaba -- sin tocar los otros tres ítems de esa colección
+(master-key de Noctalia, Chromium, credencial de Nextcloud de otra app),
+que siguen en uso ahí.
+
+**Nota para el futuro:** si esto vuelve a pasar tras un rebuild o cambio
+de sesión, empezar revisando `ReadAlias "default"` contra `login` antes de
+asumir que es un bug nuevo -- este fix vive únicamente en el estado del
+keyring (`~/.local/share/keyrings/`), no en `/nixdots`, así que no
+sobrevive a un `rm -rf ~/.local/share/keyrings` ni a un usuario nuevo.
+
 ## AirPods: audio se corta después de un rato de uso -- nueva pista real, distinta de la hipótesis térmica de la ronda #13 (2026-07-26)
 
 El usuario reportó que los AirPods se "traban" -- suena bien un rato y
