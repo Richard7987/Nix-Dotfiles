@@ -91,8 +91,12 @@
     mesa-demos
     vulkan-tools
 
-    # Minecraft Java Edition (el paquete `minecraft` de nixpkgs fue
-    # eliminado por estar roto; `prismlauncher` es el reemplazo recomendado).
-    prismlauncher
+    # Minecraft Java Edition. Reemplaza a prismlauncher (que sí estaba en
+    # nixpkgs) por pedido explícito -- x-minecraft-launcher no tiene paquete
+    # oficial en nixpkgs ni flake comunitario (confirmado buscando), así que
+    # se empaqueta acá mismo desde el AppImage oficial. Ver
+    # pkgs/x-minecraft-launcher.nix para el porqué del approach (AppImage
+    # envuelto, no build desde fuente) y qué se confirmó en vivo.
+    (callPackage ../pkgs/x-minecraft-launcher.nix { })
   ];
 }
