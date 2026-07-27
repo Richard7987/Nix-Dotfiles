@@ -195,6 +195,29 @@
     pinentry.package = pkgs.pinentry-qt; # funciona bien en Wayland/Hyprland (a diferencia de pinentry-gtk2 en X11)
   };
 
+  # --- delta: diffs con resaltado de sintaxis (got diff) ---
+  # got produce diff unificado estándar (igual que git diff/diff -u), así que
+  # delta lo entiende sin que le importe que el VCS acá sea got y no git --
+  # confirmado, delta solo lee el formato del diff, no invoca git.
+  # Sin PAGER=delta a propósito: got (a diferencia de git) no invoca ningún
+  # pager por su cuenta -- confirmado con `strings $(which got) | grep -i
+  # pager` (nada) y el man page (tampoco lo menciona) -- así que esa variable
+  # no le serviría de nada a got diff, y de paso afectaría a CUALQUIER otro
+  # programa que respete $PAGER (man, systemctl status, journalctl) sin
+  # ningún beneficio a cambio. En vez de eso, la función `gd` de abajo
+  # (programs.zsh.initContent) pipea `got diff` a delta explícitamente.
+  # paquete delta declarado más abajo, junto al resto de home.packages (dos
+  # asignaciones de home.packages en el mismo archivo chocan -- Nix tira
+  # "attribute already defined", no las mergea solas como sí hace el sistema
+  # de módulos entre archivos distintos).
+  xdg.configFile."delta/config".text = ''
+    [delta]
+        navigate = true
+        side-by-side = true
+        line-numbers = true
+        syntax-theme = gruvbox-dark
+  '';
+
   # --- zsh ---
   programs.zsh = {
     enable = true;
@@ -324,6 +347,27 @@
         esac
       }
 
+      # gotd / gotl: `got diff` / `got log -p` a través de delta. got (a
+      # diferencia de git) no invoca ningún pager por su cuenta -- confirmado
+      # con `strings $(which got) | grep -i pager` (nada), el man page
+      # (tampoco lo menciona), y el propio ejemplo del man page usa
+      # `got diff | less` a mano -- así que hace falta pipearlo siempre.
+      # "$@" para poder pasarle los mismos argumentos que aceptan got diff /
+      # got log (revisiones, -c, un path).
+      #
+      # NO se llaman "gd"/"gl": el plugin "git" de oh-my-zsh (arriba) ya
+      # define alias gd='git diff' y alias gl='git pull' -- un alias tapa a
+      # una función del mismo nombre en zsh (la expansión de alias corre
+      # antes de resolver funciones), así que gd/gl acá nunca se hubieran
+      # ejecutado. gotd/gotl no chocan con nada del plugin git.
+      gotd() {
+        got diff "$@" | delta
+      }
+
+      gotl() {
+        got log -p "$@" | delta
+      }
+
       # pfetch al final: después de p10k (ya cargado arriba) para no
       # imprimir nada antes de que el instant prompt se muestre -- si igual
       # sale una advertencia de "console output during initialization" (el
@@ -364,6 +408,7 @@
   # ahí para el porqué.)
 
   home.packages = with pkgs; [
+    delta # diffs con resaltado (got diff / git diff) -- ver PAGER=delta y xdg.configFile."delta/config" más arriba
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
