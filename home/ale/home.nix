@@ -434,6 +434,19 @@
       # la primera vez que se abre. allowUnfree ya está en true a nivel
       # sistema (hosts/ale/configuration.nix, por Nvidia/Steam) y
       # useGlobalPkgs = true lo hereda acá, así que no hace falta nada extra.
+    libreoffice-fresh # suite completa (Writer/Calc/Impress/Draw/Base/Math) --
+      # "fresh" (26.2.x, última rama) en vez de "still" (25.8.x, LTS): sin
+      # motivo para preferir la rama LTS acá.
+    hunspellDicts.es_MX # diccionario ortográfico español de México, para que
+      # LibreOffice lo detecte al corregir. No hace falta wiring extra: el
+      # wrapper real de libreoffice (pkgs/applications/office/libreoffice/
+      # wrapper.nix) ya recorre $NIX_PROFILES buscando */share/hunspell y
+      # arma $DICPATH solo -- alcanza con que el paquete esté instalado acá
+      # (home.packages cae en el profile del usuario, que sí está en
+      # $NIX_PROFILES). El idioma default del documento ya sale es_MX porque
+      # LibreOffice hereda el locale del sistema (i18n.defaultLocale en
+      # hosts/ale/configuration.nix), así que no hay que tocar nada dentro
+      # de la UI tampoco.
     # dependencia del plugin oficial "screen_recorder" de Noctalia
     # (noctalia-dev/official-plugins) -- el plugin solo hace de wrapper/IPC,
     # busca este binario en PATH. El derivation de nixpkgs ya wrappea
