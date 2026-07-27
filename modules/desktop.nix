@@ -22,6 +22,31 @@
   # --- Requisitos de Noctalia (docs.noctalia.dev/v5/getting-started/nixos) ---
   networking.networkmanager.enable = true;
   hardware.bluetooth.enable = true;
+
+  # El control de Xbox Wireless Controller (045e:0b13, firmware 5.09) empareja
+  # por Bluetooth LE puro (HID-over-GATT, servicio 0x1812) -- confirmado en
+  # vivo (2026-07-26): `bluetoothctl` lo lista solo como "LE", sin "BREDR".
+  # Sin lo de abajo, el pairing/bonding se completa bien (`Paired: yes`,
+  # `Bonded: yes` en bluetoothctl) pero el propio control corta la conexión
+  # segundos después (`org.bluez.Reason.Remote, Connection terminated by
+  # remote user` en btmon) -- por eso queda parpadeando en loop. Mismo
+  # síntoma y mismo fix reportados en NixOS Discourse
+  # (discourse.nixos.org/t/xbox-controller-stuck-in-a-disconnect-reconnect-loop/67845):
+  # `Privacy = "device"` corrige el manejo de direcciones LE privadas
+  # (el punto que más importa acá, dado que este control es LE-only) y
+  # `JustWorksRepairing = "always"` evita que un bond a medio formar de un
+  # intento previo bloquee el re-pairing. `Class`/`FastConnectable` los deja
+  # el mismo hilo pero son para BR/EDR clásico -- no afectan a este control,
+  # se agregan solo por paridad con el fix confirmado.
+  hardware.bluetooth.settings = {
+    General = {
+      Privacy = "device";
+      JustWorksRepairing = "always";
+      Class = "0x000100";
+      FastConnectable = "true";
+    };
+  };
+
   services.power-profiles-daemon.enable = true;
   services.upower.enable = true;
 
