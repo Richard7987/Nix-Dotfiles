@@ -701,7 +701,15 @@ in
         # PATH de Neovim. Con gcc disponible, hererocks compila bien y no
         # hace falta pelear por deshabilitar rocks.hererocks (que ni
         # siquiera es una opción que lazyvim-nix exponga -- es del
-        # `lazy.setup()` global, no del spec por-plugin).
+        # `lazy.setup()` global, no del spec por-plugin). El intento de
+        # hererocks queda igual como ruido cosmético en el log de arranque
+        # -- confirmado en vivo que `require("magick")` ya funciona bien
+        # con el `magick` que se instala vía extraLuaPackages más abajo,
+        # sin depender para nada de que hererocks termine de compilar.
+      python3Packages.jupytext # CLI que usa jupytext.nvim (plugin más abajo)
+        # para convertir .ipynb <-> representación de texto plano con
+        # celdas -- sin este binario en PATH, jupytext.nvim solo muestra
+        # el JSON crudo del notebook en vez de celdas editables.
     ];
 
     plugins = {
@@ -734,6 +742,21 @@ in
             max_width_window_percentage = math.huge,
             window_overlap_clear_enabled = true,
           },
+        }
+      '';
+
+      # jupytext.nvim -- abre un .ipynb directo como su representación de
+      # texto plano (celdas marcadas con # %%, estilo "hydrogen"), para
+      # poder editarlo/evaluarlo con molten como si fuera un notebook de
+      # verdad, en vez de solo evaluar rangos sueltos de un .py/.sage.
+      # lazy = false: recomendado por el propio plugin, para no perderse
+      # el autocmd de conversión si el .ipynb es el primer archivo que
+      # abrís al arrancar Neovim.
+      jupytext = ''
+        return {
+          "GCBallesteros/jupytext.nvim",
+          config = true,
+          lazy = false,
         }
       '';
 
