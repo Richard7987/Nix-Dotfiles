@@ -767,11 +767,24 @@ in
     extraLuaPackages = ps: [ ps.magick ];
   };
 
-  # JUPYTER_PATH global -- así molten-nvim (que corre bajo el Python de
-  # Neovim, no el de Sage) también descubre el kernelspec "sagemath" (ver
-  # el `let` de arriba, sageJupyterPath). No rompe nada más: es puramente
-  # aditivo (un directorio más donde buscar kernelspecs), y bound a
-  # 127.0.0.1 el server real (services.sage-jupyterlab) igual, esta
-  # variable ni siquiera lo lanza, solo hace visible su definición.
-  home.sessionVariables.JUPYTER_PATH = sageJupyterPath;
+  home.sessionVariables = {
+    # JUPYTER_PATH global -- así molten-nvim (que corre bajo el Python de
+    # Neovim, no el de Sage) también descubre el kernelspec "sagemath" (ver
+    # el `let` de arriba, sageJupyterPath). No rompe nada más: es puramente
+    # aditivo (un directorio más donde buscar kernelspecs), y bound a
+    # 127.0.0.1 el server real (services.sage-jupyterlab) igual, esta
+    # variable ni siquiera lo lanza, solo hace visible su definición.
+    JUPYTER_PATH = sageJupyterPath;
+
+    # image.nvim intenta compilar su propio Lua 5.1 vía hererocks al
+    # arrancar (para el binding `magick`) -- confirmado en vivo que fallaba
+    # con "readline/readline.h: No existe el fichero o el directorio" al
+    # compilar lua.c (Lua se compila con -DLUA_USE_READLINE). Tener
+    # `readline` en el PATH (via gcc, arriba) no alcanza -- el compilador
+    # necesita que sus include/lib queden expuestos explícitamente. CPATH
+    # y LIBRARY_PATH son variables estándar que gcc respeta directo, sin
+    # necesitar que readline sea buildInput de una derivación real.
+    CPATH = "${pkgs.readline.dev}/include";
+    LIBRARY_PATH = "${pkgs.readline}/lib";
+  };
 }
