@@ -266,6 +266,23 @@ in
         syntax-theme = gruvbox-dark
   '';
 
+  # --- herdr (multiplexor de agentes en terminal, paquete más abajo en
+  # home.packages) --- "gruvbox" es un theme nativo (confirmado corriendo
+  # `herdr --default-config` en vivo), mismo criterio que el resto del
+  # setup. default_shell = zsh explícito -- sin esto cae a $SHELL, que ya
+  # es zsh igual (ver users.users.ale.shell en hosts/ale/configuration.nix),
+  # pero mejor no depender de que la variable esté seteada igual en todos
+  # los contextos donde se lance herdr.
+  xdg.configFile."herdr/config.toml".text = ''
+    onboarding = false
+
+    [theme]
+    name = "gruvbox"
+
+    [terminal]
+    default_shell = "zsh"
+  '';
+
   # --- zsh ---
   programs.zsh = {
     enable = true;
@@ -486,6 +503,11 @@ in
     (pkgs.writeShellScriptBin "sage-python3" ''
       exec ${sageWithDebug}/bin/sage --python3 "$@"
     '')
+    herdr # multiplexor de agentes (Claude Code, etc.) para la terminal --
+      # NO reemplaza a kitty (que sigue siendo la terminal, ver
+      # modules/desktop.nix), corre COMO programa dentro de ella, similar a
+      # tmux/zellij pero con detección de estado de agentes (blocked/
+      # working/done). Config en xdg.configFile más abajo.
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
@@ -547,6 +569,11 @@ in
       '';
       meta = pkgs.jetbrains.idea.meta // { mainProgram = "idea"; };
     })
+    zed-editor # IDE con soporte nativo de ACP (Zed lo creó) -- Claude Code
+      # corre ahí sin plugin de por medio, a diferencia de Neovim/agentic.nvim.
+      # Se activa desde la propia UI (menú "+" del Agent Panel), usa el
+      # `claude-code` ya instalado a nivel de sistema (hosts/ale/
+      # configuration.nix) vía $PATH, sin configuración adicional.
     libreoffice-fresh # suite completa (Writer/Calc/Impress/Draw/Base/Math) --
       # "fresh" (26.2.x, última rama) en vez de "still" (25.8.x, LTS): sin
       # motivo para preferir la rama LTS acá.
