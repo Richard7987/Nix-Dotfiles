@@ -694,6 +694,14 @@ in
         # Ya viene wrappeado contra el `claude-code` que ya tenías instalado
         # (ver postInstall del propio paquete en nixpkgs) -- mismo login,
         # sin credenciales nuevas que configurar.
+      gcc # image.nvim intenta instalar su propio binding `magick` de Lua vía
+        # hererocks (compila un Lua 5.1 propio desde cero) la primera vez
+        # que arranca -- confirmado en vivo: fallaba con "couldn't run gcc
+        # ...: is gcc in PATH?" porque no había ningún compilador C en el
+        # PATH de Neovim. Con gcc disponible, hererocks compila bien y no
+        # hace falta pelear por deshabilitar rocks.hererocks (que ni
+        # siquiera es una opción que lazyvim-nix exponga -- es del
+        # `lazy.setup()` global, no del spec por-plugin).
     ];
 
     plugins = {
