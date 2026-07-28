@@ -752,10 +752,34 @@ in
       # lazy = false: recomendado por el propio plugin, para no perderse
       # el autocmd de conversión si el .ipynb es el primer archivo que
       # abrís al arrancar Neovim.
+      #
+      # custom_language_formatting.sage -- SIN esto, abrir un notebook con
+      # kernel "sagemath" crasheaba: el plugin trae una tabla fija de
+      # lenguajes (python/julia/r/bash, ver lua/jupytext/utils.lua en su
+      # repo) y "sage" no está ahí, así que la extensión de salida quedaba
+      # nil y explotaba con "attempt to concatenate local 'extension' (a
+      # nil value)". Confirmado leyendo el código fuente real (init.lua):
+      # custom_language_formatting SÍ evita esa tabla rota por completo --
+      # sale por una rama de código distinta que no la toca.
+      # extension = "py" (no "sage") a propósito: ese valor se lo pasa tal
+      # cual al comando `jupytext --to <extension>:<style>` real (el CLI
+      # de Python, que no tiene idea de qué es "sage") -- "py" con estilo
+      # "hydrogen" alcanza para el round-trip .ipynb <-> texto plano.
+      # force_ft = "python" solo cambia el resaltado de sintaxis en
+      # Neovim, no afecta la conversión en sí.
       jupytext = ''
         return {
           "GCBallesteros/jupytext.nvim",
-          config = true,
+          opts = {
+            style = "hydrogen",
+            custom_language_formatting = {
+              sage = {
+                extension = "py",
+                style = "hydrogen",
+                force_ft = "python",
+              },
+            },
+          },
           lazy = false,
         }
       '';
