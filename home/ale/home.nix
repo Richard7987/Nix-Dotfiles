@@ -1,5 +1,19 @@
 { config, pkgs, lib, inputs, ... }:
 
+let
+  # SOLO para sage (ver flake.nix, input nixpkgs-stable): nixos-26.05 en vez
+  # de unstable, porque sage es un build pesado (~1700 archivos Cython) que
+  # en unstable puede pisar una ventana sin caché de Hydra por cualquier
+  # bump reciente (pasó en vivo el 2026-07-27: nixpkgs#545171, sagelib roto
+  # por el bump a Python 3.14, arreglado un día después pero mientras tanto
+  # implicaba compilar todo a mano). Stable tiene builds de Hydra mucho más
+  # estables/cacheados y encima no carga Python 3.14 todavía, evitando esa
+  # clase de regresión.
+  pkgsStable = import inputs.nixpkgs-stable {
+    inherit (pkgs.stdenv.hostPlatform) system;
+    config.allowUnfree = true; # por consistencia con nixpkgs.config.allowUnfree de hosts/ale/configuration.nix, aunque sage no lo necesita
+  };
+in
 {
   imports = [
     inputs.noctalia.homeModules.default
@@ -411,6 +425,9 @@
     delta # diffs con resaltado (got diff / git diff) -- ver PAGER=delta y xdg.configFile."delta/config" más arriba
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
+    (python3Packages.callPackage ../../pkgs/clamui.nix { }) # GUI de ClamAV -- clamav en sí va en configuration.nix (services.clamav), clamui solo invoca `clamscan` por $PATH
+    pkgsStable.sage # sistema matemático (no es un IDE -- CLI + kernel Jupyter propio). Paquete oficial de nixpkgs, no hace falta derivación propia como clamui/librepods.
+      # pkgsStable (nixos-26.05, no el nixpkgs/unstable de arriba) a propósito -- ver el comentario del `let` más arriba.
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
@@ -426,14 +443,52 @@
     obsidian # notas locales en Markdown -- paquete directo de nixpkgs, sin
       # módulo declarativo propio (guarda su config/vaults dentro de cada
       # vault, no hay nada que declarar acá).
-    jetbrains.idea # IntelliJ IDEA Ultimate -- paquete directo de nixpkgs, no
-      # Toolbox: Toolbox baja binarios fuera del store y se autoactualiza por
-      # su cuenta, no encaja con el modelo declarativo de este repo (mismo
-      # motivo por el que LibrePods se compila de fuente en vez de usar un
-      # AppImage, ver pkgs/librepods.nix). Requiere licencia/login JetBrains
-      # la primera vez que se abre. allowUnfree ya está en true a nivel
-      # sistema (hosts/ale/configuration.nix, por Nvidia/Steam) y
-      # useGlobalPkgs = true lo hereda acá, así que no hace falta nada extra.
+    # IntelliJ IDEA Ultimate -- paquete directo de nixpkgs, no Toolbox:
+    # Toolbox baja binarios fuera del store y se autoactualiza por su
+    # cuenta, no encaja con el modelo declarativo de este repo (mismo
+    # motivo por el que LibrePods se compila de fuente en vez de usar un
+    # AppImage, ver pkgs/librepods.nix). Requiere licencia/login JetBrains
+    # la primera vez que se abre. allowUnfree ya está en true a nivel
+    # sistema (hosts/ale/configuration.nix, por Nvidia/Steam) y
+    # useGlobalPkgs = true lo hereda acá, así que no hace falta nada extra.
+    #
+    # Wrapper sobre bin/idea para arreglar el preview de Markdown (y
+    # cualquier otra vista basada en JCEF -- el navegador embebido de las
+    # IDEs JetBrains, Chromium Embedded Framework). Diagnosticado en vivo
+    # (2026-07-27): el preview se queda en blanco porque
+    # jcef_helper/libcef.so (adentro de idea/plugins/jcef-plugin/jcef/)
+    # fallan con "error while loading shared libraries" contra ~19 libs
+    # (nspr/nss, dbus, at-spi2 (atk), cups, la pila de X11, mesa/gbm,
+    # expat, xkbcommon, cairo, pango) -- confirmado corriendo
+    # `ldd .../jcef_helper` a mano contra el store real. Es un gap real de
+    # nixpkgs, no de esta config: pkgs/applications/editors/jetbrains/
+    # ides/idea.nix solo agrega `zlib` a extraLdPath, e incluso el propio
+    # readme.md de nixpkgs para paquetes jetbrains tiene un TODO sin
+    # resolver sobre JCEF ("use chromium stuff built by nixpkgs for
+    # jcef?"). No se puede simplemente re-wrappear bin/idea con
+    # overrideAttrs porque colisiona con el nombre que makeWrapper ya usa
+    # internamente (.idea-wrapped, creado por el wrapProgram original) --
+    # symlinkJoin + un wrapper nuevo evita eso del todo, sin tocar los
+    # archivos internos del paquete original. share/applications/*.desktop
+    # y los íconos quedan igual (symlinkeados desde el paquete real), y
+    # como el .desktop usa `Exec=idea` (comando pelado, no ruta absoluta),
+    # el launcher de Noctalia agarra este wrapper solo por estar antes en
+    # $PATH -- sin tocar nada del .desktop.
+    (pkgs.symlinkJoin {
+      name = "idea-jcef-fix";
+      paths = [ pkgs.jetbrains.idea ];
+      nativeBuildInputs = [ pkgs.makeWrapper ];
+      postBuild = ''
+        rm "$out/bin/idea"
+        makeWrapper "${pkgs.jetbrains.idea}/bin/idea" "$out/bin/idea" \
+          --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath (with pkgs; [
+            nspr nss dbus at-spi2-core cups
+            libx11 libxcomposite libxdamage libxext libxfixes libxrandr libxcb
+            mesa expat libxkbcommon cairo pango
+          ])}"
+      '';
+      meta = pkgs.jetbrains.idea.meta // { mainProgram = "idea"; };
+    })
     libreoffice-fresh # suite completa (Writer/Calc/Impress/Draw/Base/Math) --
       # "fresh" (26.2.x, última rama) en vez de "still" (25.8.x, LTS): sin
       # motivo para preferir la rama LTS acá.

@@ -86,7 +86,36 @@
     curl
     wget
     claude-code
+    clamav # da el binario `clamscan` que invoca clamui (pkgs/clamui.nix, instalado vía home.nix)
   ];
+
+  # Mantiene las firmas de virus actualizadas (freshclam) -- sin esto,
+  # clamscan/clamui funcionan pero con una base de datos que envejece.
+  services.clamav.updater.enable = true;
+
+  # --- ccache: cachea objetos compilados de C/C++ entre builds ---
+  # OJO con el alcance real: ccache acelera SOLO compilación C/C++/Objective-C
+  # (gcc/clang), no Rust (librepods, pkgs/librepods.nix) ni Python puro
+  # (clamui). packageNames hace un `super.<pkg>.override { stdenv =
+  # ccacheStdenv; }` sobre el atributo top-level nombrado -- para "sage" esto
+  # solo re-stdenv-ea el wrapper final (sage.nix); el compile real de
+  # sagelib (los ~1700 .pyx -> C++ -> gcc) pasa por un scope de Python
+  # separado (python3.pkgs.overrideScope en package.nix) que NO hereda el
+  # stdenv de ese override -- así que en la práctica ccache probablemente NO
+  # acelera sage específicamente. Se deja igual declarado (no hace daño, y
+  # sirve de inmediato para cualquier paquete C/C++ "plano" que agregues a
+  # esta lista más adelante) -- confirmar con `nix-ccache --show-stats`
+  # después del próximo rebuild de sage si de verdad hay hits.
+  programs.ccache = {
+    enable = true;
+    packageNames = [ "sage" ];
+  };
+
+  # ccache necesita reusar su directorio de cache entre builds -- el sandbox
+  # de Nix aísla el filesystem de cada build por defecto, lo que anularía el
+  # cache. extra-sandbox-paths expone SOLO este path puntual dentro del
+  # sandbox (bind-mount), sin desactivar el sandbox para todo lo demás.
+  nix.settings.extra-sandbox-paths = [ config.programs.ccache.cacheDir ];
 
   # NUNCA cambies este valor después de la instalación inicial (ver `man configuration.nix`,
   # sección system.stateVersion). Reemplázalo por el que te haya dado el instalador de NixOS

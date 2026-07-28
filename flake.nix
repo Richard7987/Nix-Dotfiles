@@ -4,6 +4,13 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    # SOLO para paquetes puntuales que no necesitan estar en la punta de
+    # unstable y sí se benefician de builds de Hydra más estables/cacheados
+    # (ver home/ale/home.nix, pkgsStable.sage) -- el resto del sistema
+    # (Hyprland, Noctalia, zen-browser, el driver Nvidia) sigue en
+    # nixpkgs/unstable arriba, sin tocar.
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
+
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
