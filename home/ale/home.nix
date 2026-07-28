@@ -778,13 +778,18 @@ in
 
     # image.nvim intenta compilar su propio Lua 5.1 vía hererocks al
     # arrancar (para el binding `magick`) -- confirmado en vivo que fallaba
-    # con "readline/readline.h: No existe el fichero o el directorio" al
-    # compilar lua.c (Lua se compila con -DLUA_USE_READLINE). Tener
-    # `readline` en el PATH (via gcc, arriba) no alcanza -- el compilador
-    # necesita que sus include/lib queden expuestos explícitamente. CPATH
-    # y LIBRARY_PATH son variables estándar que gcc respeta directo, sin
-    # necesitar que readline sea buildInput de una derivación real.
+    # primero con "readline/readline.h: No existe el fichero o el
+    # directorio" al compilar lua.c (Lua se compila con
+    # -DLUA_USE_READLINE), y después -- ya con el header resuelto -- con
+    # "no se puede encontrar -lncurses" al LINKEAR (readline en sí depende
+    # de ncurses/termcap). Tener los paquetes en el PATH (via gcc, arriba)
+    # no alcanza -- el compilador/linker necesitan que sus include/lib
+    # queden expuestos explícitamente. CPATH y LIBRARY_PATH son variables
+    # estándar que gcc/ld respetan directo, sin necesitar que estos
+    # paquetes sean buildInputs de una derivación real. Verificado en vivo
+    # compilando Y linkeando lua+luac completos a mano con estas mismas
+    # variables antes de aplicar esto.
     CPATH = "${pkgs.readline.dev}/include";
-    LIBRARY_PATH = "${pkgs.readline}/lib";
+    LIBRARY_PATH = "${pkgs.readline}/lib:${pkgs.ncurses}/lib";
   };
 }
