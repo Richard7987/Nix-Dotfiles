@@ -27,10 +27,30 @@ let
     extraPythonPackages = ps: [ ps.debugpy ];
     requireSageTests = false;
   };
+
+  # Ruta al kernelspec de sagemath, para que molten-nvim (que corre bajo el
+  # Python propio de Neovim, no el de Sage) también lo descubra. `sage`
+  # (el wrapper final) ya trae esto embebido como un `--prefix JUPYTER_PATH`
+  # de makeWrapper -- en vez de reconstruir a mano el mismo
+  # `pkgs.jupyter-kernel.create {...}` que arma package.nix de sage
+  # (duplicaría lógica interna y se desincroniza fácil), se extrae
+  # directo del wrapper ya construido leyendo su contenido. Así se
+  # mantiene sincronizado solo con cualquier `sageWithDebug` que termine
+  # resolviendo, sin ningún hash de store hardcodeado.
+  sageJupyterPath =
+    let
+      wrapperContent = builtins.readFile "${sageWithDebug}/bin/sage";
+      m = builtins.match ".*JUPYTER_PATH=.(/nix/store/[a-z0-9]+-jupyter-kernels)..*" wrapperContent;
+    in
+    if m == null then
+      throw "No se pudo extraer JUPYTER_PATH del wrapper de sage -- ¿cambió el formato del wrapper?"
+    else
+      builtins.head m;
 in
 {
   imports = [
     inputs.noctalia.homeModules.default
+    inputs.lazyvim.homeManagerModules.default
   ];
 
   home.username = "ale";
@@ -630,4 +650,93 @@ in
       WantedBy = [ "default.target" ];
     };
   };
+
+  # --- Neovim/LazyVim: notebooks de Sage vía molten-nvim + chat con Claude
+  # Code vía ACP (agentic.nvim) ---
+  # lazyvim-nix (pfassina/lazyvim-nix, ver flake.nix) en vez de nixificar
+  # LazyVim entero: la config (autocmds/keymaps/options/specs de plugin)
+  # queda declarada acá, pero lazy.nvim (el package manager propio de
+  # LazyVim) sigue instalando/actualizando los plugins solo -- es el
+  # híbrido que recomienda la comunidad en vez de pelear con las
+  # actualizaciones de cada plugin individual vía Nix.
+  programs.lazyvim = {
+    enable = true;
+    extraPackages = with pkgs; [
+      imagemagick # requerido por molten-nvim/image.nvim para renderizar imágenes
+      claude-agent-acp # adaptador ACP oficial -- agentic.nvim lo invoca por PATH.
+        # Ya viene wrappeado contra el `claude-code` que ya tenías instalado
+        # (ver postInstall del propio paquete en nixpkgs) -- mismo login,
+        # sin credenciales nuevas que configurar.
+    ];
+
+    plugins = {
+      molten = ''
+        return {
+          "benlubas/molten-nvim",
+          version = "^1.0.0",
+          build = ":UpdateRemotePlugins",
+          dependencies = { "3rd/image.nvim" },
+          init = function()
+            vim.g.molten_image_provider = "image.nvim"
+            vim.g.molten_auto_open_output = false
+            vim.g.molten_wrap_output = true
+            vim.g.molten_virt_text_output = true
+          end,
+        }
+      '';
+
+      # Backend "kitty" -- kitty (ya es la terminal por default, ver
+      # modules/desktop.nix) soporta el protocolo de gráficos de kitty
+      # nativamente, sin necesitar ueberzugpp de por medio.
+      image-nvim = ''
+        return {
+          "3rd/image.nvim",
+          opts = {
+            backend = "kitty",
+            max_width = 100,
+            max_height = 12,
+            max_height_window_percentage = math.huge,
+            max_width_window_percentage = math.huge,
+            window_overlap_clear_enabled = true,
+          },
+        }
+      '';
+
+      # agentic.nvim -- interfaz de chat con agentes ACP dentro de Neovim.
+      # provider = "claude-agent-acp" usa el binario de nixpkgs de arriba;
+      # reusa el login de `claude` ya existente, sin API key nueva.
+      agentic = ''
+        return {
+          "carlos-algms/agentic.nvim",
+          opts = {
+            provider = "claude-agent-acp",
+          },
+        }
+      '';
+    };
+
+    config.keymaps = ''
+      -- Molten (kernel de Sage) -- ver `:help molten-nvim` para el resto de comandos
+      vim.keymap.set("n", "<leader>mi", ":MoltenInit sagemath<CR>", { desc = "Molten: iniciar kernel de Sage" })
+      vim.keymap.set("n", "<leader>me", ":MoltenEvaluateOperator<CR>", { desc = "Molten: evaluate operator" })
+      vim.keymap.set("n", "<leader>mc", ":MoltenReevaluateCell<CR>", { desc = "Molten: re-evaluar celda" })
+      vim.keymap.set("v", "<leader>mv", ":<C-u>MoltenEvaluateVisual<CR>gv", { desc = "Molten: evaluar selección" })
+    '';
+  };
+
+  # pynvim/jupyter-client/etc -- requeridos por molten-nvim para hablar con
+  # el kernel de Jupyter. magick (Lua, no confundir con el imagemagick de
+  # arriba) -- lo usa image.nvim para decodificar imágenes.
+  programs.neovim = {
+    extraPython3Packages = ps: with ps; [ pynvim jupyter-client cairosvg pnglatex plotly pyperclip ];
+    extraLuaPackages = ps: [ ps.magick ];
+  };
+
+  # JUPYTER_PATH global -- así molten-nvim (que corre bajo el Python de
+  # Neovim, no el de Sage) también descubre el kernelspec "sagemath" (ver
+  # el `let` de arriba, sageJupyterPath). No rompe nada más: es puramente
+  # aditivo (un directorio más donde buscar kernelspecs), y bound a
+  # 127.0.0.1 el server real (services.sage-jupyterlab) igual, esta
+  # variable ni siquiera lo lanza, solo hace visible su definición.
+  home.sessionVariables.JUPYTER_PATH = sageJupyterPath;
 }

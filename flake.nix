@@ -42,6 +42,17 @@
       url = "github:AngelJumbo/gruvbox-wallpapers";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # LazyVim declarativo -- la config en sí (autocmds/keymaps/options/specs
+    # de plugins) queda versionada acá, pero lazy.nvim (el package manager
+    # propio de LazyVim) sigue administrando la instalación/actualización
+    # de los plugins por su cuenta -- es el híbrido que recomienda la
+    # comunidad en vez de nixificar cada plugin individualmente (mucha
+    # fricción con las actualizaciones de otra forma).
+    lazyvim = {
+      url = "github:pfassina/lazyvim-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
