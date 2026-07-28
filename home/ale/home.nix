@@ -13,6 +13,20 @@ let
     inherit (pkgs.stdenv.hostPlatform) system;
     config.allowUnfree = true; # por consistencia con nixpkgs.config.allowUnfree de hosts/ale/configuration.nix, aunque sage no lo necesita
   };
+
+  # debugpy agregado al entorno Python de Sage -- sin esto, el debugger de
+  # notebooks de IDEA/PyCharm no puede conectarse al kernel (necesita
+  # debugpy corriendo del lado del kernel para breakpoints/step; confirmado
+  # en vivo: `sage --python3 -c "import debugpy"` fallaba con
+  # ModuleNotFoundError antes de este override). requireSageTests = false
+  # -- sin esto, nixpkgs vuelve a correr TODA la suite de doctests de Sage
+  # (miles de tests, 30+ min) cada vez que cambia el derivation de "sage"
+  # por cualquier motivo (como agregar un paquete acá) -- confirmado en
+  # vivo, se probó primero sin este flag y tardaba demasiado.
+  sageWithDebug = pkgsStable.sage.override {
+    extraPythonPackages = ps: [ ps.debugpy ];
+    requireSageTests = false;
+  };
 in
 {
   imports = [
@@ -426,8 +440,32 @@ in
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
     (python3Packages.callPackage ../../pkgs/clamui.nix { }) # GUI de ClamAV -- clamav en sí va en configuration.nix (services.clamav), clamui solo invoca `clamscan` por $PATH
-    pkgsStable.sage # sistema matemático (no es un IDE -- CLI + kernel Jupyter propio). Paquete oficial de nixpkgs, no hace falta derivación propia como clamui/librepods.
+    sageWithDebug # sistema matemático (no es un IDE -- CLI + kernel Jupyter propio). Paquete oficial de nixpkgs (con debugpy agregado, ver el `let` más arriba), no hace falta derivación propia como clamui/librepods.
       # pkgsStable (nixos-26.05, no el nixpkgs/unstable de arriba) a propósito -- ver el comentario del `let` más arriba.
+    # Wrapper para que IntelliJ/PyCharm puedan usar el kernel de Sage en
+    # notebooks Jupyter SIN pelear con el server manual. Diagnosticado en
+    # vivo (2026-07-27): el soporte nativo de notebooks de la IDE lanza su
+    # propio server Jupyter invocando DIRECTO el binario python3 que
+    # elegiste como intérprete del proyecto (`python3 -m jupyterlab ...`),
+    # no el comando `sage` -- así que se salta por completo `sage-env` (el
+    # script que agrega Singular/Maxima/GAP/etc. al $PATH antes de correr
+    # nada). Resultado: el kernel "sagemath" muere al arrancar con
+    # "singular is not available" apenas el notebook hace `import
+    # sage.all`, aunque correr un .sage vía el plugin SageMath (que sí
+    # invoca `sage` de verdad) funciona perfecto.
+    #
+    # `sage --python3 [...]` es la forma oficial de correr el Python real
+    # de Sage con sage-env ya sourceado (confirmado: `sage --python3
+    # --version` imprime "Python 3.13.14", igual que un python3 normal, y
+    # `sys.executable` adentro apunta al python3 real) -- así que este
+    # wrapper solo reenvía todos los argumentos ahí. Se hace pasar por un
+    # intérprete Python cualquiera ante la IDE (podés elegirlo como
+    # "System Interpreter" del proyecto igual que el python3 crudo), pero
+    # cualquier proceso que lance por dentro (el kernel Jupyter incluido)
+    # hereda el $PATH ya correcto.
+    (pkgs.writeShellScriptBin "sage-python3" ''
+      exec ${sageWithDebug}/bin/sage --python3 "$@"
+    '')
     gitstatus # da el binario gitstatusd que necesita Powerlevel10k (ver programs.zsh)
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
@@ -531,4 +569,65 @@ in
       '';
     }))
   ];
+
+  # --- Server de Jupyter Lab con kernel de Sage, persistente ---
+  # Diagnosticado en vivo (2026-07-27): el modo "IDE-Managed" de la
+  # integración nativa de notebooks de IDEA falla en el handshake de
+  # websocket con el kernel ("Failed to create a web socket") aunque el
+  # server y el kernel arrancan bien -- confirmado que el bug es del
+  # cliente de websocket de la IDE, no del server: una conexión de
+  # websocket hecha a mano desde Python al mismo server conecta sin
+  # problema. La vuelta es apuntar la IDE a un server YA corriendo
+  # ("Running Local Server" en Settings -> Tools -> Jupyter -> Jupyter
+  # Servers) en vez de dejar que la IDE lance el suyo -- pero eso requiere
+  # que algo mantenga ese server vivo (arrancarlo a mano no sobrevive un
+  # logout/reinicio, y cada arranque genera un token nuevo, lo que rompe
+  # la config guardada en la IDE). Este servicio systemd de usuario
+  # resuelve las dos cosas: arranca solo en cada login y usa un token fijo
+  # para que la config de "Running Local Server" quede estable para
+  # siempre.
+  #
+  # --notebook-dir apunta a IdeaProjects/Jupyter_Notebooks a propósito
+  # (no $HOME entero): el server expone un navegador de archivos por HTTP
+  # con auth por token -- acotarlo a esta carpeta evita exponer el resto
+  # del $HOME sin necesidad.
+  #
+  # Token fijo generado una vez con `python3 -c "import secrets;
+  # print(secrets.token_hex(24))"` -- no es un secreto de verdad crítico
+  # (el server solo escucha en 127.0.0.1, --ip=127.0.0.1, nunca sale a la
+  # red), pero igual no queda hardcodeado en texto plano más de lo
+  # necesario: solo lo usa este servicio y la config de "Running Local
+  # Server" en la IDE (Settings -> Tools -> Jupyter -> Jupyter Servers),
+  # ninguna de las dos versionadas en git/got.
+  systemd.user.services.sage-jupyterlab = {
+    Unit = {
+      Description = "Jupyter Lab con kernel de Sage (server persistente para la integración de notebooks de IDEA)";
+      After = [ "graphical-session.target" ];
+    };
+    Service = {
+      # PYTHONPATH -- necesario para que el debugger de notebooks de IDEA
+      # funcione contra este server. Diagnosticado en vivo (2026-07-28):
+      # "ModuleNotFoundError: No module named 'pycharm_jupyter'" (y después,
+      # ya con ese arreglado, lo mismo con 'pydev_jupyter_utils') al intentar
+      # debuggear. Son helpers propios de la IDE (no están en pip ni en
+      # nixpkgs) repartidos en varias subcarpetas de
+      # ~/.local/share/JetBrains/IntelliJIdea2026.2/python-ce/helpers/ --
+      # pycharm_jupyter vive directo ahí, pydev_jupyter_utils en
+      # helpers/jupyter_debug/ (que a su vez importa cosas de helpers/pydev/,
+      # el pydevd real). La IDE normalmente inyecta todo esto vía PYTHONPATH
+      # cuando ELLA misma lanza el kernel ("Managed"), pero acá usamos
+      # "Running Local Server" (server externo, no lanzado por la IDE --
+      # justamente para esquivar el bug de websocket del modo Managed, ver
+      # más arriba), así que nunca tiene la oportunidad de inyectarlo. Hay
+      # que actualizar estas rutas a mano si cambia la versión de IntelliJ
+      # IDEA (2026.2 ahora).
+      Environment = "PYTHONPATH=%h/.local/share/JetBrains/IntelliJIdea2026.2/python-ce/helpers:%h/.local/share/JetBrains/IntelliJIdea2026.2/python-ce/helpers/pydev:%h/.local/share/JetBrains/IntelliJIdea2026.2/python-ce/helpers/jupyter_debug";
+      ExecStart = "${sageWithDebug}/bin/sage --notebook=jupyterlab --no-browser --ip=127.0.0.1 --notebook-dir=%h/IdeaProjects/Jupyter_Notebooks --IdentityProvider.token=818b9fb9de7e0868bf296469e17e3e5549d7725ea6ad2958";
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
+    Install = {
+      WantedBy = [ "default.target" ];
+    };
+  };
 }
