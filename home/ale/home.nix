@@ -482,9 +482,9 @@ in
         rm "$out/bin/idea"
         makeWrapper "${pkgs.jetbrains.idea}/bin/idea" "$out/bin/idea" \
           --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath (with pkgs; [
-            nspr nss dbus at-spi2-core cups
+            nspr nss dbus at-spi2-core cups alsa-lib
             libx11 libxcomposite libxdamage libxext libxfixes libxrandr libxcb
-            mesa expat libxkbcommon cairo pango
+            libgbm expat libxkbcommon cairo pango
           ])}"
       '';
       meta = pkgs.jetbrains.idea.meta // { mainProgram = "idea"; };
