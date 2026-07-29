@@ -13,6 +13,18 @@
 
   programs.home-manager.enable = true;
 
+  # OpenCode -- instalado vía el script curl oficial (~/.opencode/bin), NO
+  # como paquete de nixpkgs: nixpkgs-unstable va atrasado (1.18.4) contra el
+  # instalador oficial (1.18.9), y cada versión usa su propia base de datos
+  # de sesiones (~/.local/share/opencode/opencode{,-stable}.db) -- son
+  # incompatibles entre sí, no comparten sesiones. Confirmado en vivo
+  # (2026-07-29): el binario de nixpkgs ni siquiera podía listar sesiones
+  # creadas por el instalador curl. Esta línea es lo único que faltaba para
+  # que el binario curl aparezca en el PATH de toda sesión (gráfica y
+  # terminales nuevas) -- antes solo la terminal donde corrió el instalador
+  # lo tenía, porque el script no toca .zshrc/.bashrc/.zprofile.
+  home.sessionPath = [ "$HOME/.opencode/bin" ];
+
   # --- Carpetas XDG estándar ---
   # Antes solo existían Pictures/Videos/Downloads creadas a mano (más una
   # "Descargas" duplicada, probablemente de una app que leyó el locale
