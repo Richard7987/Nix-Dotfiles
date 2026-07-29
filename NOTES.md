@@ -2344,3 +2344,100 @@ síntomas similares), y revisar si WirePlumber está cambiando de perfil
 A2DP a HFP/HSP sin una llamada activa (se buscó en el journal de esta
 sesión y no había ninguna mención de `hfp`/`hsp`/`headset`, así que por
 ahora descartado).
+
+## Migración de vuelta a git, reorganización de repos a ~/projects (2026-07-28)
+
+A pedido del usuario: volver de `got` a `git` en todos los repos "por el
+momento" (no descartado un regreso a `got` más adelante). Cinco work
+trees de `got` encontrados: `/nixdots`, `~/website`, `~/gotvcs-intellij`,
+`~/IdeaProjects/.profile`, `~/IdeaProjects/Jupyter_Notebooks` -- cada uno
+con su propio repo bare `got` en `~/<nombre>.git` (formato on-disk
+compatible con git; `got` es básicamente un CLI alternativo sobre el
+mismo formato de objetos que usa `git`, no un formato propio).
+
+**Método de conversión** (por repo, sin tocar historial): `git clone
+--no-hardlinks --local` desde el bare repo (`--no-hardlinks` porque el
+scratch de trabajo estaba en otro filesystem -- `--local` por defecto
+usa hardlinks y `Enlace cruzado entre dispositivos no permitido` si el
+destino cruza de device) a un directorio de prueba, `diff -rq --exclude=.got
+--exclude=.git` contra el work tree real para confirmar que el árbol de
+archivos coincide exactamente (las únicas diferencias esperadas: cosas
+no trackeadas por `got` tampoco -- `.idea/`, `result`, `build/`,
+`.ipynb_checkpoints/`, y en `~/website` un `.idea/workspace.xml` con un
+cambio sin commitear que ya estaba sucio antes de tocar nada). Confirmado
+el árbol idéntico, `mv .got .got-backup` (no se borra -- "por el
+momento" sugiere que esto podría revertirse) y `cp -a` el `.git` recién
+clonado al work tree real -- conversión in-place sin recrear ni un solo
+archivo de contenido, solo el metadata de VCS. `git remote set-url
+origin` después, apuntando al Forgejo real (`ssh://git@pcale.tail32b955
+.ts.net:2222/Ale/...`) en vez del bare repo local del que se clonó
+(`git clone --local` deja `origin` apuntando al path local por default).
+`gotvcs-intellij` no tenía remote configurado en absoluto (proyecto
+local, sin pushear todavía) -- se le sacó el `origin` que el clone local
+le había puesto, en vez de dejarlo apuntando a un bare repo que ya no
+tiene sentido mantener.
+
+**`/nixdots` se convirtió in-place, sin mover** -- vive directo bajo `/`
+(no bajo `/home/ale`), y `/` no es escribible por `ale` (confirmado:
+`touch /x` → `Permiso denegado`), así que ni renombrarlo ni clonar un
+sibling ahí era una opción; tampoco tendría sentido moverlo, todo el
+resto de la config (`nixos-update`, scripts, docs) lo referencia por la
+ruta absoluta `/nixdots`.
+
+**Los otros 4 se movieron a `~/projects/<nombre>`** (antes dispersos
+entre `~/` y `~/IdeaProjects/`), consolidados en un solo lugar. Los
+bare repos viejos (`~/nixdots.git`, `~/website.git`, etc.) se dejaron
+sin tocar -- ya no hace falta que existan (git no necesita un mirror
+bare separado como sí necesita `got`), pero borrarlos no se pidió y no
+cuesta nada dejarlos.
+
+**Bug propio durante la migración:** el primer intento de agregar
+`.got-backup/` a cada `.gitignore` vía `printf >> archivo` asumió que
+todos terminaban en newline. `/nixdots/.gitignore` no lo tenía, así que
+el append quedó pegado a la última línea existente sin salto de línea
+(`.idea/.got-backup/` en vez de dos líneas separadas) -- corrompiendo
+esa regla de ignore. Detectado por el propio system-reminder de cambios
+externos al archivo, corregido a mano. Los otros 4 `.gitignore` sí
+terminaban en newline y no tuvieron el problema.
+
+**`home.nix` tenía funcionalidad real atada a `got`, no solo docs** --
+`nixos-update()` corría `got status`/`got commit` sobre `flake.lock`, y
+existían `gotd`/`gotl` (funciones manuales para pipear `got diff`/`got
+log -p` a `delta`, necesarias porque `got` no invoca ningún pager
+propio). Convertido a `git status --porcelain`/`git commit` en
+`nixos-update()`; `gotd`/`gotl` se sacaron por completo -- git sí tiene
+pager propio, así que `programs.delta.enable = true` (opción real,
+`programs.git.delta.enable` está renombrada, confirmado con build real:
+"has been renamed to `programs.delta.enable'"; además
+`enableGitIntegration` hay que setearlo explícito, el auto-enable por
+`programs.git.enable` quedó deprecado) alcanza para que `git diff`/`git
+log -p`/`git show` -- y el alias `gd` de oh-my-zsh -- salgan coloreados
+solos, sin funciones a mano.
+
+**Por qué importa que sea git y no solo un directorio versionado
+cualquiera:** confirmado en vivo (`nix build`/`nix flake check` sobre
+`/nixdots` ya convertido) que Nix detecta el árbol git real y avisa
+`warning: Git tree '/nixdots' is dirty` con cambios sin commitear --
+señal que no existía con `got` como VCS (Nix filtra qué archivos entran
+al flake vía `git ls-files`, no tiene ningún soporte equivalente para
+`got`). README actualizado con esto explícito.
+
+**Bootstrap en PC nueva, simplificado.** La razón original de clonar
+primero desde el espejo público de GitHub (`Richard7987/Nix-Dotfiles`)
+en vez de directo del Forgejo por Tailscale sigue vigente con git
+(huevo-y-gallina: no hay Tailscale/YubiKey en una PC recién instalada,
+independiente del VCS) -- pero el motivo *original* de necesitar ese
+espejo era un bug real de `got` con HTTPS (`bufio_starttls`/`unexpected
+end of file` contra GitHub, ver sección de got de arriba en este mismo
+archivo). `git` no tiene ese bug, así que el bootstrap bajó de tres
+pasos (`git clone --bare` + armar `got.conf` a mano + `got checkout`) a
+uno (`git clone` directo), sin `allowed_signers` ni ningún archivo
+extra fuera del work tree.
+
+**Firma de commits, mejora real, no solo paridad.** `got commit` no
+soporta firma en absoluto (solo `got tag -S`, vía SSH). Con git,
+`programs.git.signing.signByDefault = true` (ya estaba configurado)
+firma **todos** los commits con la YubiKey (GPG) automáticamente, no
+solo los tags -- README actualizado, sección de firma pasada de `got
+tag -S`/`got tag -V` (SSH) a `git tag -s`/`git tag -v` (GPG, misma
+llave que ya firma los commits).

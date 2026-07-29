@@ -195,17 +195,13 @@
     pinentry.package = pkgs.pinentry-qt; # funciona bien en Wayland/Hyprland (a diferencia de pinentry-gtk2 en X11)
   };
 
-  # --- delta: diffs con resaltado de sintaxis (got diff) ---
-  # got produce diff unificado estándar (igual que git diff/diff -u), así que
-  # delta lo entiende sin que le importe que el VCS acá sea got y no git --
-  # confirmado, delta solo lee el formato del diff, no invoca git.
-  # Sin PAGER=delta a propósito: got (a diferencia de git) no invoca ningún
-  # pager por su cuenta -- confirmado con `strings $(which got) | grep -i
-  # pager` (nada) y el man page (tampoco lo menciona) -- así que esa variable
-  # no le serviría de nada a got diff, y de paso afectaría a CUALQUIER otro
-  # programa que respete $PAGER (man, systemctl status, journalctl) sin
-  # ningún beneficio a cambio. En vez de eso, la función `gd` de abajo
-  # (programs.zsh.initContent) pipea `got diff` a delta explícitamente.
+  # --- delta: diffs con resaltado de sintaxis ---
+  # Repos migrados de got a git (2026-07-28, ver NOTES.md) -- a diferencia de
+  # got, git SÍ invoca un pager propio (core.pager), así que
+  # programs.git.delta.enable = true (más abajo, junto a programs.git) alcanza
+  # para que `git diff`/`git log -p`/`git show` salgan coloreados solos, sin
+  # necesitar las funciones manuales gotd/gotl de antes (sacadas). El alias
+  # `gd` del plugin "git" de oh-my-zsh (`git diff`) ya hereda esto gratis.
   # paquete delta declarado más abajo, junto al resto de home.packages (dos
   # asignaciones de home.packages en el mismo archivo chocan -- Nix tira
   # "attribute already defined", no las mergea solas como sí hace el sistema
@@ -318,10 +314,11 @@
       # 2026-07-22) porque no hay NIX_PATH nixos-config. El subshell con
       # `set -e` corta en el primer error (ej. build roto) sin aplicar
       # switch ni tocar el cwd de la terminal interactiva.
-      # /nixdots es un work tree de got (sin .git, ver "Migración a got
-      # puro" en NOTES.md 2026-07-22) -- got commit no soporta firma, así
-      # que este commit de flake.lock queda sin firmar (a diferencia de los
-      # commits manuales de antes con git commit -S).
+      # /nixdots volvió a ser un repo git normal (2026-07-28, ver NOTES.md --
+      # antes fue work tree de got, migración documentada como "Migración a
+      # got puro" en NOTES.md 2026-07-22). programs.git.signing.signByDefault
+      # ya está en true (más arriba), así que este commit de flake.lock queda
+      # firmado con la YubiKey solo, sin nada especial acá.
       #
       # Sin argumentos actualiza TODOS los inputs a la vez (comportamiento
       # de siempre). Pasándole nombres de inputs (ej. `nixos-update nixpkgs`)
@@ -336,8 +333,8 @@
           sudo nix flake update "$@"
           sudo nixos-rebuild build --flake .#ale
           sudo nixos-rebuild switch --flake .#ale
-          if [ -n "$(got status flake.lock)" ]; then
-            got commit -m "Actualiza flake.lock" flake.lock
+          if [ -n "$(git status --porcelain -- flake.lock)" ]; then
+            git commit -m "Actualiza flake.lock" -- flake.lock
           fi
         )
       }
@@ -362,27 +359,6 @@
             return 1
             ;;
         esac
-      }
-
-      # gotd / gotl: `got diff` / `got log -p` a través de delta. got (a
-      # diferencia de git) no invoca ningún pager por su cuenta -- confirmado
-      # con `strings $(which got) | grep -i pager` (nada), el man page
-      # (tampoco lo menciona), y el propio ejemplo del man page usa
-      # `got diff | less` a mano -- así que hace falta pipearlo siempre.
-      # "$@" para poder pasarle los mismos argumentos que aceptan got diff /
-      # got log (revisiones, -c, un path).
-      #
-      # NO se llaman "gd"/"gl": el plugin "git" de oh-my-zsh (arriba) ya
-      # define alias gd='git diff' y alias gl='git pull' -- un alias tapa a
-      # una función del mismo nombre en zsh (la expansión de alias corre
-      # antes de resolver funciones), así que gd/gl acá nunca se hubieran
-      # ejecutado. gotd/gotl no chocan con nada del plugin git.
-      gotd() {
-        got diff "$@" | delta
-      }
-
-      gotl() {
-        got log -p "$@" | delta
       }
 
       # pfetch al final: después de p10k (ya cargado arriba) para no
@@ -433,6 +409,18 @@
     };
   };
 
+  # git (a diferencia de got) invoca su propio pager -- programs.delta acá
+  # (NO programs.git.delta, renombrado -- confirmado con build real: "has
+  # been renamed to `programs.delta.enable'") alcanza para que
+  # `git diff`/`git log -p`/`git show` (y el alias `gd` de oh-my-zsh) salgan
+  # coloreados con delta solos, sin funciones manuales. enableGitIntegration
+  # explícito: el auto-enable basado en programs.git.enable quedó deprecado.
+  # ver xdg.configFile."delta/config" más arriba para el styling.
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+  };
+
   # --- TeXstudio: conecta Tectonic como compilador por defecto ---
   # TeXstudio no tiene una opción declarativa de home-manager (no existe
   # `programs.texstudio`) y su config (~/.config/texstudio/texstudio.ini)
@@ -479,7 +467,7 @@
   # ahí para el porqué.)
 
   home.packages = with pkgs; [
-    delta # diffs con resaltado (got diff / git diff) -- ver PAGER=delta y xdg.configFile."delta/config" más arriba
+    delta # diffs con resaltado (git diff/log/show vía programs.git.delta.enable) -- ver xdg.configFile."delta/config" más arriba
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
     (python3Packages.callPackage ../../pkgs/clamui.nix { }) # GUI de ClamAV -- clamav en sí va en configuration.nix (services.clamav), clamui solo invoca `clamscan` por $PATH

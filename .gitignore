@@ -3,3 +3,4 @@ result-*
 .direnv/
 *.swp
 .idea/
+.got-backup/

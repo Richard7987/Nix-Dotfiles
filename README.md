@@ -4,11 +4,23 @@ Configuración NixOS de `ale` — laptop Intel+Nvidia con Hyprland +
 [Noctalia](https://docs.noctalia.dev/). Desplegada vía flake, sin
 gestión de secretos (la clave GPG vive en una YubiKey).
 
-Versionado con **[got](https://gameoftrees.org/)** (no `git`) — repo
-bare canónico en `~/nixdots.git`, `/nixdots` es su work tree. Los
-commits no llevan firma (`got commit` no soporta GPG/SSH); solo los
-tags pueden firmarse con SSH (`got tag -S`). Detalle de la migración en
-[`NOTES.md`](NOTES.md).
+Versionado con **git** (2026-07-28: vuelto de `got` a `git` -- ver
+"Migración de vuelta a git" en [`NOTES.md`](NOTES.md); antes, entre
+2026-07-22 y esa fecha, usó [got](https://gameoftrees.org/)). `/nixdots`
+es un repo git normal, con `origin` apuntando al Forgejo propio vía
+Tailscale (`ssh://git@pcale.tail32b955.ts.net:2222/Ale/Nix-Dotfiles.git`).
+
+Importa que sea un repo git de verdad (no solo un directorio suelto) para
+que `nix flake` filtre correctamente qué archivos entran al flake -- Nix
+usa el índice de git (`git ls-files`, respetando `.gitignore`) para
+decidir qué es parte del source del flake, y avisa con
+`warning: Git tree '/nixdots' is dirty` si hay cambios sin commitear
+(confirmado corriendo `nix flake check`/`nix build` en vivo). Con `got`
+como VCS, Nix no tenía ninguna de esas dos señales.
+
+`programs.git.signing.signByDefault = true` (`home/ale/home.nix`) firma
+todo commit con la YubiKey (GPG) automáticamente -- a diferencia de
+`got commit`, que no soporta firma en absoluto.
 
 ## Estructura
 
@@ -48,40 +60,29 @@ pkgs/
 
 ## Bootstrap en una PC nueva
 
-`got` no puede clonar por HTTPS desde GitHub (bug real, confirmado:
-`bufio_starttls` / `unexpected end of file` -- ver `NOTES.md`). Por eso el
-clone inicial se hace con `git` (una sola vez, contra el espejo público en
-GitHub, sin autenticación) y `got` toma el relevo desde el checkout:
+El repo real vive en un Forgejo solo accesible por Tailscale
+(`pcale.tail32b955.ts.net`) -- pero en una PC recién instalada no hay
+Tailscale ni YubiKey configurados todavía (huevo y gallina: Tailscale lo
+levanta este mismo repo). Por eso el clone inicial se hace contra el
+espejo **público** en GitHub (sin autenticación), y recién después se
+repunta `origin` al Forgejo real:
 
 ```sh
-# 1. clone inicial con git (repo público, sin YubiKey ni Tailscale)
+# 1. clone inicial desde el espejo público (sin YubiKey ni Tailscale)
 nix-shell -p git
-git clone --bare https://github.com/Richard7987/Nix-Dotfiles.git ~/nixdots.git
+git clone https://github.com/Richard7987/Nix-Dotfiles.git /nixdots
 
-# 2. got toma el relevo -- autor + remote real (SSH al Forgejo, no el
-#    espejo de GitHub, que got no puede fetch/send igual) + allowed_signers
-#    para poder verificar tags firmados (got tag -V, ver más abajo)
-nix-shell -p got
-ssh-add -L > ~/.ssh/yubikey.pub
-echo "ale_bnes@tuta.com $(cat ~/.ssh/yubikey.pub)" > ~/.ssh/allowed_signers
-cat > ~/nixdots.git/got.conf <<'EOF'
-author "ale <ale_bnes@tuta.com>"
-allowed_signers "/home/ale/.ssh/allowed_signers"
-remote "origin" {
-	server git@pcale.tail32b955.ts.net
-	protocol ssh
-	port 2222
-	repository "/Ale/Nix-Dotfiles.git"
-	fetch { branch { "main" } }
-}
-EOF
-got checkout ~/nixdots.git /nixdots
+# 2. una vez que Tailscale + la YubiKey (GPG/SSH) ya estén andando,
+#    repuntar origin al Forgejo real
+cd /nixdots
+git remote set-url origin ssh://git@pcale.tail32b955.ts.net:2222/Ale/Nix-Dotfiles.git
+git fetch origin
 ```
 
-
-`~/.ssh/allowed_signers` y `~/nixdots.git/got.conf` viven fuera del work
-tree (no versionados) -- este paso hay que repetirlo en cada PC nueva,
-no es algo que el `checkout` traiga solo.
+Con `got` este bootstrap necesitaba un `git clone --bare` + `got.conf`
+armado a mano + `got checkout` en tres pasos (el cliente HTTP propio de
+`got` no tolera cómo GitHub sirve HTTPS -- ver "Migración de vuelta a
+git" en `NOTES.md`); con `git` de punta a punta es solo esto.
 
 Después: ajustar los placeholders de hardware (`hosts/ale/hardware-configuration.nix`,
 bus IDs en `modules/graphics.nix`, nombre de monitor en `home/ale/hyprland.lua`)
@@ -89,16 +90,15 @@ y recién ahí el primer despliegue.
 
 ## Firmar un release (tag)
 
-Los commits de este repo no llevan firma (`got commit` no la soporta).
-Para marcar una versión de forma verificable, se usa un tag firmado con
-SSH vía la YubiKey (requiere `allowed_signers` ya configurado, ver
-bootstrap arriba):
+Los commits de este repo ya salen firmados solos (GPG vía YubiKey,
+`programs.git.signing.signByDefault = true`). Para marcar una versión,
+un tag firmado con la misma llave:
 
 ```sh
 cd /nixdots
-got tag -S ~/.ssh/yubikey.pub -m "mensaje describiendo esta versión" v2026.07.22
-got send -t v2026.07.22 origin
-got tag -V v2026.07.22   # verifica la firma
+git tag -s -m "mensaje describiendo esta versión" v2026.07.28
+git push origin v2026.07.28
+git tag -v v2026.07.28   # verifica la firma
 ```
 
 Esquema de versión: **CalVer** (`vAAAA.MM.DD`) -- cada tag es una foto
