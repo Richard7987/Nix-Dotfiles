@@ -4,13 +4,6 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # SOLO para paquetes puntuales que no necesitan estar en la punta de
-    # unstable y sí se benefician de builds de Hydra más estables/cacheados
-    # (ver home/ale/home.nix, pkgsStable.sage) -- el resto del sistema
-    # (Hyprland, Noctalia, zen-browser, el driver Nvidia) sigue en
-    # nixpkgs/unstable arriba, sin tocar.
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
-
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -40,17 +33,6 @@
     # ver home/ale/home.nix para cómo se instala vía home.file).
     gruvbox-wallpapers = {
       url = "github:AngelJumbo/gruvbox-wallpapers";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # LazyVim declarativo -- la config en sí (autocmds/keymaps/options/specs
-    # de plugins) queda versionada acá, pero lazy.nvim (el package manager
-    # propio de LazyVim) sigue administrando la instalación/actualización
-    # de los plugins por su cuenta -- es el híbrido que recomienda la
-    # comunidad en vez de nixificar cada plugin individualmente (mucha
-    # fricción con las actualizaciones de otra forma).
-    lazyvim = {
-      url = "github:pfassina/lazyvim-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
