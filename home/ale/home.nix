@@ -195,6 +195,32 @@
     pinentry.package = pkgs.pinentry-qt; # funciona bien en Wayland/Hyprland (a diferencia de pinentry-gtk2 en X11)
   };
 
+  # --- ssh: IdentityAgent explícito (bug real de IDEA, 2026-07-28) ---
+  # enableSshSupport de arriba exporta SSH_AUTH_SOCK vía .zshenv/.zprofile --
+  # alcanza para cualquier terminal real, pero NO para IntelliJ IDEA: su
+  # terminal embebida / git4idea arrancan subprocesos con un entorno propio
+  # que no hereda esa variable (confirmado en vivo: SSH_AUTH_SOCK ausente
+  # ahí aunque el proceso principal de IDEA sí la tenga en /proc/<pid>/environ
+  # -- bug documentado de JetBrains, EnvironmentUtil cachea/reconstruye el
+  # entorno de los hijos aparte). Probado hasta -Dij.load.shell.env=true en
+  # idea64.vmoptions (el fix oficial) y sigue sin aparecer -- IDEA decide
+  # saltarse esa recaptura si detecta SHLVL=1 ("launched from a terminal"),
+  # que es justo este caso. En vez de pelear con eso: IdentityAgent le dice
+  # a `ssh` directamente dónde está el socket del agente, sin depender de
+  # que la variable de entorno llegue bien -- soluciona el problema de raíz
+  # para CUALQUIER programa (no solo IDEA) que herede mal el entorno gráfico.
+  # Ruta hardcodeada (no "$SSH_AUTH_SOCK", que es justo la variable que
+  # puede faltar): /run/user/1000/gnupg/S.gpg-agent.ssh es la ruta estable
+  # que gpg-agent siempre usa para este usuario (UID 1000), confirmada con
+  # `systemctl --user show-environment` y estable entre reinicios del
+  # agente (gpg-agent recrea el socket en el mismo path, no lo renombra).
+  programs.ssh = {
+    enable = true;
+    # settings, no matchBlocks -- confirmado con build real: matchBlocks (y
+    # matchBlocks.*.extraOptions) están deprecados a favor de esto.
+    settings."*".IdentityAgent = "/run/user/1000/gnupg/S.gpg-agent.ssh";
+  };
+
   # --- delta: diffs con resaltado de sintaxis ---
   # Repos migrados de got a git (2026-07-28, ver NOTES.md) -- a diferencia de
   # got, git SÍ invoca un pager propio (core.pager), así que
@@ -367,21 +393,12 @@
       # wizard eligió modo Verbose), es solo informativa, no rompe nada.
       pfetch
 
-      # herdr al abrir terminal: sin `exec` a propósito -- si algún día herdr
-      # sale por una razón inesperada, queda la zsh de abajo con un prompt
-      # normal en vez de un pane muerto. $HERDR_ENV es la variable que herdr
-      # exporta (=1) en los shells de sus propios panes -- confirmado en
-      # vivo corriendo `env` DENTRO de un pane real vía
-      # `herdr pane run --session default <pane-id> 'env'` (no `HERDR_SESSION`,
-      # que no existe pese al nombre sugerente; también están HERDR_PANE_ID/
-      # HERDR_TAB_ID/HERDR_WORKSPACE_ID/HERDR_SOCKET_PATH, pero HERDR_ENV es
-      # la más directa como equivalente de $TMUX). Sin este guard, cada
-      # split/tab nuevo dentro de herdr volvería a llamar `herdr`, que se
-      # bloquea solo (allow_nested = false por defecto) pero imprimiendo su
-      # propio error cada vez -- con el guard ni siquiera se intenta.
-      if [[ -z "$HERDR_ENV" ]]; then
-        herdr
-      fi
+      # herdr YA NO se auto-lanza al abrir kitty (2026-07-28, a pedido del
+      # usuario) -- sigue instalado (home.packages) para correrlo a mano
+      # (`herdr`) cuando haga falta. $HERDR_ENV/HERDR_PANE_ID/etc. (las
+      # variables que herdr exporta dentro de sus propios panes, confirmado
+      # con `herdr pane run --session default <pane-id> 'env'`) documentadas
+      # acá por si se reactiva el auto-launch más adelante.
       ''
     ];
   };
@@ -603,5 +620,8 @@
     # en PATH para el combo "Default Compiler"); no hace falta wiring extra
     # más allá de tenerlo instalado.
     texlive.combined.scheme-full
+    zed-editor # editor -- paquete directo de nixpkgs (el binario se llama
+      # `zeditor`, no `zed`; el .desktop instalado sí queda como "Zed" en el
+      # launcher)
   ];
 }
