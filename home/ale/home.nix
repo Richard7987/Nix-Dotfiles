@@ -390,6 +390,22 @@
       # sale una advertencia de "console output during initialization" (el
       # wizard eligió modo Verbose), es solo informativa, no rompe nada.
       pfetch
+
+      # herdr al abrir terminal: sin `exec` a propósito -- si algún día herdr
+      # sale por una razón inesperada, queda la zsh de abajo con un prompt
+      # normal en vez de un pane muerto. $HERDR_ENV es la variable que herdr
+      # exporta (=1) en los shells de sus propios panes -- confirmado en
+      # vivo corriendo `env` DENTRO de un pane real vía
+      # `herdr pane run --session default <pane-id> 'env'` (no `HERDR_SESSION`,
+      # que no existe pese al nombre sugerente; también están HERDR_PANE_ID/
+      # HERDR_TAB_ID/HERDR_WORKSPACE_ID/HERDR_SOCKET_PATH, pero HERDR_ENV es
+      # la más directa como equivalente de $TMUX). Sin este guard, cada
+      # split/tab nuevo dentro de herdr volvería a llamar `herdr`, que se
+      # bloquea solo (allow_nested = false por defecto) pero imprimiendo su
+      # propio error cada vez -- con el guard ni siquiera se intenta.
+      if [[ -z "$HERDR_ENV" ]]; then
+        herdr
+      fi
       ''
     ];
   };
