@@ -433,6 +433,44 @@
     };
   };
 
+  # --- TeXstudio: conecta Tectonic como compilador por defecto ---
+  # TeXstudio no tiene una opción declarativa de home-manager (no existe
+  # `programs.texstudio`) y su config (~/.config/texstudio/texstudio.ini)
+  # NO puede manejarse vía xdg.configFile: a diferencia de delta/herdr de
+  # abajo, TeXstudio reescribe ese archivo en cada uso (ventana, sesión,
+  # historial de archivos recientes) -- si xdg.configFile lo convirtiera en
+  # symlink al store (inmutable), esas escrituras fallarían en silencio.
+  # En vez de eso, activation script idempotente: solo siembra la clave la
+  # primera vez (si "Tools\Commands\tectonic" ya está seteada, no la toca),
+  # así que un cambio posterior del compilador por defecto hecho a mano
+  # desde la UI de TeXstudio se respeta en rebuilds futuros.
+  #
+  # Formato de la clave confirmado en vivo (2026-07-28): TeXstudio guarda
+  # TODO bajo una única sección [texmaker] (nombre heredado de Texmaker, su
+  # predecesor), con las claves anidadas unidas por "\" en vez de blocks
+  # anidados reales -- confirmado contra un texstudio.ini real de un
+  # usuario (thatlittleboy/TeXstudio-Qt-Stylesheet en GitHub) y verificado
+  # relanzando TeXstudio de verdad contra este archivo: lo reescribió en su
+  # propio formato canónico (sin comillas), prueba de que lo parseó y
+  # adoptó como compilador activo, no que simplemente no falló al leerlo.
+  # "compile=txs:///<id>" es el mecanismo genérico de TeXstudio para elegir
+  # QUÉ comando ejecuta el botón de compilar -- <id> puede ser cualquier
+  # comando registrado, incluido uno custom como "tectonic" acá, no solo
+  # los que trae por default (pdflatex/xelatex/lualatex/latexmk).
+  # --synctex en el comando de tectonic para que el forward/inverse search
+  # del visor de PDF integrado de TeXstudio (click en el PDF -> salta al
+  # .tex) siga funcionando igual que con pdflatex.
+  home.activation.texstudioTectonicCompiler = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    CONFIG_FILE="$HOME/.config/texstudio/texstudio.ini"
+    $DRY_RUN_CMD mkdir -p "$(dirname "$CONFIG_FILE")"
+    if [ ! -f "$CONFIG_FILE" ]; then
+      $DRY_RUN_CMD printf '[texmaker]\n' > "$CONFIG_FILE"
+    fi
+    if ! grep -q '^Tools\\Commands\\tectonic=' "$CONFIG_FILE" 2>/dev/null; then
+      $DRY_RUN_CMD sed -i '/^\[texmaker\]/a Tools\\Commands\\tectonic="tectonic --synctex %.tex"\nTools\\Commands\\compile=txs:///tectonic' "$CONFIG_FILE"
+    fi
+  '';
+
   # --- LibrePods (control de AirPods) ---
   # Ya no depende de bajar el AppImage nightly a mano -- se compila de fuente
   # (ver pkgs/librepods.nix para el porqué y las verificaciones hechas).
@@ -552,5 +590,30 @@
         wrapProgram $out/bin/gpu-screen-recorder --unset LIBVA_DRIVER_NAME
       '';
     }))
+    # Tectonic -- motor LaTeX self-contained (bajo el capó usa XeTeX + un
+    # subconjunto de TeX Live vendorizado, sin depender de una instalación de
+    # TeX Live completa). Va en home.packages (no environment.systemPackages)
+    # porque es una herramienta de usuario, no del sistema. useUserPackages =
+    # true (ver flake.nix) publica esto en /etc/profiles/per-user/ale/bin,
+    # que NixOS agrega al PATH de toda la sesión gráfica (greetd/Hyprland vía
+    # PAM), no solo a shells interactivas -- así que cualquier editor
+    # lanzado desde el launcher de Noctalia lo hereda sin configuración
+    # extra. Probado en un principio con TeXiFy-IDEA (IntelliJ IDEA), pero
+    # se abandonó esa ruta (ver NOTES.md) a favor de TeXstudio, más abajo.
+    tectonic
+    # TeXstudio -- editor LaTeX dedicado, en vez de IDEA + TeXiFy-IDEA (esa
+    # combinación quedó descartada: el "Tectonic SDK" de TeXiFy-IDEA valida
+    # el home path buscando una carpeta "urls" adentro, layout viejo del
+    # caché de Tectonic que ya no existe en versiones actuales -- ver
+    # NOTES.md). Config de compilador -> Tectonic vía home.activation
+    # (texstudioTectonicCompiler, más arriba), no a mano en la UI.
+    texstudio
+    # TeX Live completo (scheme-full = todo CTAN) -- segundo compilador
+    # disponible además de Tectonic, para documentos que necesiten
+    # pdflatex/xelatex/lualatex o un paquete que Tectonic todavía no trae
+    # vendorizado. TeXstudio detecta ambos solo (busca pdflatex/xelatex/etc
+    # en PATH para el combo "Default Compiler"); no hace falta wiring extra
+    # más allá de tenerlo instalado.
+    texlive.combined.scheme-full
   ];
 }
