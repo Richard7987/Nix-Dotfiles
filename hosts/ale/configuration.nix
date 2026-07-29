@@ -80,6 +80,14 @@
     options = "--delete-older-than 14d";
   };
 
+  # nix-ld: provee un linker dinámico genérico (+ libs comunes) para poder
+  # correr binarios prebuilt de terceros sin patchear -- sin esto, cualquier
+  # binario dinámicamente enlazado que un tool descargue por su cuenta (VSCode
+  # extensions, npx, el language server de GitHub Copilot en Zed, etc.) falla
+  # con "cannot execute: required file not found". Visto por primera vez con
+  # el language server de Copilot en Zed.
+  programs.nix-ld.enable = true;
+
   environment.systemPackages = with pkgs; [
     git
     vim
