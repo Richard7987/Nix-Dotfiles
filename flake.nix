@@ -56,6 +56,11 @@
         inherit system;
         specialArgs = { inherit inputs; };
         modules = [
+          # nixpkgs subió su propio módulo `programs.noctalia` (2026-07-29,
+          # nixos/modules/programs/wayland/noctalia.nix) que choca con el
+          # módulo del input noctalia (misma opción declarada dos veces).
+          # Usamos el del input, que sigue el upstream de noctalia-dev.
+          { disabledModules = [ "programs/wayland/noctalia.nix" ]; }
           ./hosts/ale/configuration.nix
           noctalia.nixosModules.default
           noctalia-greeter.nixosModules.default
