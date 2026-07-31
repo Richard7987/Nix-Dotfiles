@@ -618,6 +618,10 @@
     # extra. Probado en un principio con TeXiFy-IDEA (IntelliJ IDEA), pero
     # se abandonó esa ruta (ver NOTES.md) a favor de TeXstudio, más abajo.
     tectonic
+    ghostscript # da el binario `gs` -- junto con tectonic de arriba, es el
+      # pipeline LaTeX->PNG que usa `slides` (ver modules/desktop.nix) para
+      # renderizar fórmulas; sin este paquete tectonic compila el PDF pero
+      # falta el paso de rasterizado a PNG.
     # TeXstudio -- editor LaTeX dedicado, en vez de IDEA + TeXiFy-IDEA (esa
     # combinación quedó descartada: el "Tectonic SDK" de TeXiFy-IDEA valida
     # el home path buscando una carpeta "urls" adentro, layout viejo del

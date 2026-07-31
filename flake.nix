@@ -44,6 +44,16 @@
       url = "github:AngelJumbo/gruvbox-wallpapers";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Fork personal de maaslalani/slides (presentador de terminal) con
+    # LaTeX, imágenes reales y bibliografía vía Kitty Graphics Protocol.
+    # Canónico en el remoto Tailscale-only de este equipo; este input usa
+    # el mirror de GitHub (mismo criterio que nezzontli-ctl) para que
+    # nixos-rebuild funcione también fuera de la red de Tailscale.
+    slides = {
+      url = "github:Richard7987/slide";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -56,6 +66,7 @@
     , gruvbox-wallpapers
     , psysonic
     , nezzontli-ctl
+    , slides
     , ...
     }@inputs:
     let
