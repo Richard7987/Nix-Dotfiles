@@ -61,6 +61,26 @@
         "type": "github"
       }
     },
+    "nezzontli-ctl": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1785462116,
+        "narHash": "sha256-S5vQY5JR28Nmeq4AswRmFl7mD1q43MdA46GifhiJ4tA=",
+        "owner": "Richard7987",
+        "repo": "nezzontli-ctl",
+        "rev": "97b83a82103197915fefaa3b0daf649f14f57280",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Richard7987",
+        "repo": "nezzontli-ctl",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1785318670,
@@ -141,6 +161,7 @@
       "inputs": {
         "gruvbox-wallpapers": "gruvbox-wallpapers",
         "home-manager": "home-manager",
+        "nezzontli-ctl": "nezzontli-ctl",
         "nixpkgs": "nixpkgs",
         "noctalia": "noctalia",
         "noctalia-greeter": "noctalia-greeter",
