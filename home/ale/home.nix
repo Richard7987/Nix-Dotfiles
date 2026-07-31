@@ -228,9 +228,26 @@
   # agente (gpg-agent recrea el socket en el mismo path, no lo renombra).
   programs.ssh = {
     enable = true;
+    # enableDefaultConfig = false + los valores de abajo copiados a mano:
+    # el módulo advierte que esos defaults implícitos se van a deprecar, y
+    # da este mismo bloque como reemplazo exacto (ver modules/programs/ssh.nix
+    # de home-manager) -- sin cambio de comportamiento, solo lo hace explícito.
+    enableDefaultConfig = false;
     # settings, no matchBlocks -- confirmado con build real: matchBlocks (y
     # matchBlocks.*.extraOptions) están deprecados a favor de esto.
-    settings."*".IdentityAgent = "/run/user/1000/gnupg/S.gpg-agent.ssh";
+    settings."*" = {
+      IdentityAgent = "/run/user/1000/gnupg/S.gpg-agent.ssh";
+      ForwardAgent = false;
+      AddKeysToAgent = "no";
+      Compression = false;
+      ServerAliveInterval = 0;
+      ServerAliveCountMax = 3;
+      HashKnownHosts = false;
+      UserKnownHostsFile = "~/.ssh/known_hosts";
+      ControlMaster = "no";
+      ControlPath = "~/.ssh/master-%r@%n:%p";
+      ControlPersist = "no";
+    };
   };
 
   # --- delta: diffs con resaltado de sintaxis ---
@@ -629,13 +646,14 @@
     # NOTES.md). Config de compilador -> Tectonic vía home.activation
     # (texstudioTectonicCompiler, más arriba), no a mano en la UI.
     texstudio
-    # TeX Live completo (scheme-full = todo CTAN) -- segundo compilador
-    # disponible además de Tectonic, para documentos que necesiten
+    # TeX Live completo (todo CTAN) -- segundo compilador disponible
+    # además de Tectonic, para documentos que necesiten
     # pdflatex/xelatex/lualatex o un paquete que Tectonic todavía no trae
     # vendorizado. TeXstudio detecta ambos solo (busca pdflatex/xelatex/etc
     # en PATH para el combo "Default Compiler"); no hace falta wiring extra
-    # más allá de tenerlo instalado.
-    texlive.combined.scheme-full
+    # más allá de tenerlo instalado. texliveFull, no texlive.combined.scheme-full
+    # (deprecado, se va en Nixpkgs 27.05) -- mismo contenido, atributo top-level.
+    texliveFull
     zed-editor # editor -- paquete directo de nixpkgs (el binario se llama
       # `zeditor`, no `zed`; el .desktop instalado sí queda como "Zed" en el
       # launcher)
