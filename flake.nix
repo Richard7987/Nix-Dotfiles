@@ -29,6 +29,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # TUI para crear/editar contenido de nezzontli.xyz sin CMS externo (no
+    # soportan git-lfs, que es como se versionan las fotos). Canónico en
+    # Forgejo (Tailscale-only); este input usa el mirror de GitHub para que
+    # nixos-rebuild funcione también fuera de la red de Tailscale.
+    nezzontli-ctl = {
+      url = "github:Richard7987/nezzontli-ctl";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Wallpapers estilo Gruvbox (paquete Nix real, no archivos sueltos —
     # ver home/ale/home.nix para cómo se instala vía home.file).
     gruvbox-wallpapers = {
@@ -46,6 +55,7 @@
     , zen-browser
     , gruvbox-wallpapers
     , psysonic
+    , nezzontli-ctl
     , ...
     }@inputs:
     let

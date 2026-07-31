@@ -218,6 +218,11 @@
       # cliente de música self-hosted (Navidrome), reemplaza a feishin --
       # empaquetado vía su propio flake.nix (no está en nixpkgs). Hace
       # falta apuntarlo a un servidor la primera vez que se abre.
+    inputs.nezzontli-ctl.packages.${pkgs.stdenv.hostPlatform.system}.default
+      # TUI para crear/editar contenido de nezzontli.xyz sin CMS externo --
+      # comando "ctl". Por default apunta a ~/projects/website; se puede
+      # cambiar con NEZZONTLI_REPO_PATH o desde su propia pantalla de
+      # Configuración.
     got  # VCS de este mismo repo (/nixdots ya es un work tree de got, sin
          # .git -- ver "Migración a got puro" en NOTES.md, 2026-07-22).
          # Reusa ssh-agent para clone/fetch/send por ssh://, igual que git.
