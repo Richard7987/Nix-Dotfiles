@@ -196,11 +196,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785561298,
-        "narHash": "sha256-1bhx2b1KWqqJWoQN1oOh45rjwCieY+bHjlj5haxgZeU=",
+        "lastModified": 1785563576,
+        "narHash": "sha256-H6NHD30duMb/sidZmUITR5dZhMopBUtsdRFG9b3CClw=",
         "owner": "Richard7987",
         "repo": "slide",
-        "rev": "bcb2ab71430e9ef8b8c9e37376d41437b962d075",
+        "rev": "fc21959a0c4481b5f9725702e9e24df6458a7c46",
         "type": "github"
       },
       "original": {
