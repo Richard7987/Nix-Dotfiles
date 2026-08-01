@@ -639,6 +639,12 @@
       # pipeline LaTeX->PNG que usa `slides` (ver modules/desktop.nix) para
       # renderizar fórmulas; sin este paquete tectonic compila el PDF pero
       # falta el paso de rasterizado a PNG.
+    julia-bin # ejecución de bloques ```julia con Ctrl+E en `slides` (ver
+      # modules/desktop.nix); julia-bin en vez de julia porque en nixpkgs
+      # "julia" a secas compila el lenguaje entero desde fuente
+      # (USE_BINARYBUILDER=0), mientras que julia-bin sólo empaqueta el
+      # tarball prebuilt que publica JuliaLang -- mismo binario final, sin
+      # el build larguísimo.
     # TeXstudio -- editor LaTeX dedicado, en vez de IDEA + TeXiFy-IDEA (esa
     # combinación quedó descartada: el "Tectonic SDK" de TeXiFy-IDEA valida
     # el home path buscando una carpeta "urls" adentro, layout viejo del

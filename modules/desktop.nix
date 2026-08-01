@@ -225,10 +225,11 @@
       # Configuración.
     inputs.slides.packages.${pkgs.stdenv.hostPlatform.system}.default
       # Presentador de terminal (comando "slides"), fork personal con
-      # LaTeX/imágenes/bibliografía -- ver ~/projects/slides. Necesita
-      # tectonic y ghostscript en PATH para renderizar fórmulas, ya
-      # instalados como systemPackages más abajo si hace falta, o vía el
-      # devShell del propio repo.
+      # LaTeX/imágenes/bibliografía/reveal/ejecución de código -- ver
+      # ~/projects/slides. Necesita tectonic y ghostscript en PATH para
+      # renderizar fórmulas, y julia-bin para el Ctrl+E de bloques
+      # ```julia; los tres están en home.nix (paquetes de usuario, no del
+      # sistema), o vía el devShell del propio repo.
     got  # VCS de este mismo repo (/nixdots ya es un work tree de got, sin
          # .git -- ver "Migración a got puro" en NOTES.md, 2026-07-22).
          # Reusa ssh-agent para clone/fetch/send por ssh://, igual que git.
