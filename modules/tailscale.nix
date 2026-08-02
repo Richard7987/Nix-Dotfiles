@@ -3,6 +3,23 @@
 {
   services.tailscale.enable = true;
 
+  # Habilita Tailscale SSH: los peers del tailnet pueden conectar por SSH
+  # usando la identidad de Tailscale (ACLs del admin console), sin sshd de
+  # NixOS ni claves SSH propias. `tailscale set --ssh` queda persistido en
+  # el estado de tailscaled igual que el exit node (ver comentario abajo),
+  # pero lo declaramos como extraUpFlags para que sobreviva un `tailscale up`
+  # desde cero (ej. reinstalación) sin pasos manuales.
+  services.tailscale.extraUpFlags = [ "--ssh" ];
+
+  # mosh necesita SSH para el handshake inicial (lo cubre Tailscale SSH de
+  # arriba) y después habla UDP en este rango de puertos.
+  programs.mosh.enable = true;
+
+  # Todo el tráfico entre peers del tailnet (SSH, mosh, etc.) llega por esta
+  # interfaz -- confiamos en las ACLs de Tailscale en vez de duplicar reglas
+  # de firewall locales por puerto.
+  networking.firewall.trustedInterfaces = [ "tailscale0" ];
+
   # Recomendado por Tailscale cuando usas exit nodes / subnet routes
   networking.firewall.checkReversePath = "loose";
 
