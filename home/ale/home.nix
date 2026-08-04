@@ -289,6 +289,12 @@
   # --- zsh ---
   programs.zsh = {
     enable = true;
+    # vi/vim -> nvim: sin programs.neovim (ver comentario más abajo sobre
+    # por qué no se usa ese módulo), el alias hay que ponerlo a mano.
+    shellAliases = {
+      vi = "nvim";
+      vim = "nvim";
+    };
     # Sin "theme" acá a propósito -- el prompt real lo pone Powerlevel10k
     # (fuente más abajo, en initContent), no un theme de oh-my-zsh.
     oh-my-zsh = {
@@ -467,6 +473,76 @@
     enableGitIntegration = true;
   };
 
+  # --- Neovim + LazyVim ---
+  # home.packages, NO programs.neovim: ese módulo SIEMPRE gestiona
+  # ~/.config/nvim/init.lua como symlink al store (aunque no declares
+  # ningún plugin/extraConfig -- confirmado en vivo, 2026-08-02: pisó el
+  # init.lua de LazyVim escrito a mano nada más activar, dejando el intro
+  # default de Neovim en vez de arrancar lazy.nvim). Un init.lua inmutable
+  # en el store es incompatible con LazyVim, que necesita reescribir
+  # lazy-lock.json en cada :Lazy sync. Acá simplemente instalamos el
+  # binario + las herramientas que pide LazyVim (:checkhealth lazy) --
+  # git ya lo pone programs.git.enable, no hace falta repetirlo. Nada de
+  # PATH "wrappeado": nvim corre desde la shell interactiva normal (zsh),
+  # que ya hereda el PATH completo del profile de home-manager -- el bug
+  # clásico de NixOS (wrapper con --set PATH en vez de --prefix) solo
+  # aplica cuando el propio derivation de neovim wrappea el binario, cosa
+  # que no hacemos acá.
+  #
+  # ripgrep/fd: los invoca directo LazyVim (snacks.nvim/fzf-lua) como
+  # binarios de shell. lazygit: keymap nativo de LazyVim (<leader>gg).
+  # unzip: Mason (gestor de LSPs/linters de LazyVim, corre en runtime) lo
+  # necesita para descomprimir descargas. gcc/gnumake: fallback nativo de
+  # blink.cmp si no logra bajar su binario prebuilt para esta plataforma.
+  #
+  # La config de LazyVim en sí (~/.config/nvim) queda FUERA de este repo a
+  # propósito, mismo criterio que TeXstudio más abajo: lazy.nvim reescribe
+  # lazy-lock.json en cada actualización de plugin. ~/.config/nvim/lua/
+  # plugins/base16.lua + lua/matugen.lua sincronizan el colorscheme de
+  # Neovim con el tema Gruvbox de Noctalia (programs.noctalia.settings.theme
+  # más arriba).
+  home.sessionVariables = {
+    EDITOR = "nvim";
+    VISUAL = "nvim";
+  };
+
+  # --- Molten (celdas Jupyter dentro de Neovim): entorno Python dedicado ---
+  # NixOS no tiene un "python del sistema" al que agregarle paquetes con pip
+  # (todo se declara) -- esto reutiliza el mismo intérprete python3 de
+  # nixpkgs que ya usa el resto del sistema, sumándole solo lo que pide
+  # Molten/jupytext: pynvim + jupyter-client (host del kernel), ipykernel
+  # (kernel de Python en sí), cairosvg + pillow (Molten renderiza vía
+  # image.nvim -- ver lua/plugins/image.lua -- pero cairosvg/pillow cubren
+  # salidas SVG/PIL que ese pipeline no toca directo), jupytext (CLI que usa
+  # jupytext.nvim para convertir .ipynb en el momento).
+  #
+  # home.file (no home.packages): NO va al PATH general a propósito -- si
+  # "python3" quedara en el PATH de toda la shell, pisaría cualquier otro
+  # python3 que otra herramienta del sistema espere encontrar ahí. En vez de
+  # eso, symlink de nombre ESTABLE (~/.local/share/nvim-python3) que
+  # solo lua/config/options.lua referencia (vim.g.python3_host_prog) y que
+  # lua/config/lazy.lua antepone al $PATH interno de Neovim nada más --
+  # el symlink en sí no cambia de ruta aunque el store path de adentro
+  # cambie en cada rebuild, así que ninguna referencia se rompe.
+  home.file.".local/share/nvim-python3".source =
+    pkgs.python3.withPackages (ps: with ps; [
+      pynvim
+      jupyter-client
+      ipykernel
+      cairosvg
+      pillow
+      jupytext
+      pylatexenc # da el CLI `latex2text` -- uno de los dos conversores que
+        # render-markdown.nvim prueba en orden (utftex, latex2text; ver
+        # settings.lua del plugin) para volver fórmulas LaTeX en unicode
+        # inline. utftex no está en nixpkgs, pero con latex2text solo alcanza
+        # (el converter list prueba en orden hasta el primero que exista).
+    ]);
+
+  # Los LSPs/formatters/linters que reemplazan a Mason (ver
+  # lua/plugins/mason-disable.lua) van en home.packages, más abajo -- una
+  # sola lista, dos `home.packages` separados chocan (ver el comentario ahí).
+
   # --- TeXstudio: conecta Tectonic como compilador por defecto ---
   # TeXstudio no tiene una opción declarativa de home-manager (no existe
   # `programs.texstudio`) y su config (~/.config/texstudio/texstudio.ini)
@@ -513,6 +589,56 @@
   # ahí para el porqué.)
 
   home.packages = with pkgs; [
+    neovim # editor -- ver comentario "Neovim + LazyVim" más arriba sobre por
+      # qué es home.packages y no programs.neovim
+    ripgrep # invocado por snacks.nvim/fzf-lua dentro de LazyVim
+    fd # ídem, para find de archivos
+    lazygit # invocado por el keymap nativo <leader>gg de LazyVim
+    unzip # usado por varios plugins de nvim al descomprimir descargas (ej. releases de GitHub)
+    gcc # fallback nativo de blink.cmp si no baja su binario prebuilt
+    gnumake # ídem
+
+    # --- LSPs/formatters/linters de los extras de LazyVim (ver lazyvim.json) ---
+    # Mason (el instalador default de LazyVim) no funciona en NixOS: no
+    # puede correr binarios bajados de internet (store inmutable, sin
+    # linker FHS estándar) -- confirmado en vivo, 2026-08-02: nil_ls/gopls
+    # fallaron por falta de cargo/go (Mason los compila, no baja prebuilt) y
+    # marksman SÍ bajó un binario prebuilt pero crasheó con SIGABRT al
+    # ejecutarlo. lua/plugins/mason-disable.lua apaga mason.nvim/
+    # mason-lspconfig/mason-tool-installer del todo; esta lista es el
+    # reemplazo 1:1 de cada herramienta que Mason intentaba instalar,
+    # agrupada por extra.
+    nil # lang.nix
+    go gopls gofumpt golangci-lint gotools # lang.go (gotools da `goimports`)
+    jdt-language-server # lang.java (nvim-jdtls) -- ya trae su propio JRE
+    kotlin-language-server ktlint # lang.kotlin
+    dockerfile-language-server docker-compose-language-service hadolint # lang.docker
+      # -- el binario real de dockerfile-language-server-nodejs se llama
+      # `docker-langserver` (el nombre del paquete no es el del binario),
+      # que es justo el nombre que nvim-lspconfig ya busca por defecto
+    neocmakelsp cmake-format # lang.cmake (cmake-format da también `cmake-lint`)
+    vscode-langservers-extracted # lang.json -- da `vscode-json-language-server` (jsonls)
+    astro-language-server vtsls # lang.astro (vtsls: LSP de TS/JS que usa como
+      # base; el binario real de astro-language-server se llama `astro-ls`,
+      # que es el nombre que nvim-lspconfig ya busca por defecto)
+    marksman markdownlint-cli2 markdown-toc # lang.markdown
+    pyright ruff # lang.python -- Mason los bajó bien (binarios simples, sin
+      # deps nativas raras), pero se migran igual por consistencia
+    tree-sitter # tree-sitter-cli, usado por varios parsers custom
+    stylua # formatter de Lua -- para esta misma config de nvim
+    shfmt # formatter de shell scripts
+    # lang.julia (julials) queda afuera de esta lista: no es un binario
+    # descargado, nvim-lspconfig arranca `julia` directo con un snippet que
+    # hace `using LanguageServer, SymbolServer` -- esos dos paquetes se
+    # agregan al entorno de Julia del usuario (~/.julia) con `julia -e
+    # 'using Pkg; Pkg.add(...)'`, igual que IJulia.
+
+    imagemagick # backend magick_cli de image.nvim (lua/plugins/image.lua) --
+      # shellea al binario `magick` en vez de compilar el rock FFI vía
+      # luarocks/hererocks, que fue justo lo que dejó a medias el intento
+      # previo de este mismo setup (ver ~/.config/nvim.bak-20260802-174115/
+      # lazy-lock.json: tenía "hererocks" suelto, sin ningún plugin que lo
+      # declarara -- nunca llegó a terminarse).
     delta # diffs con resaltado (git diff/log/show vía programs.git.delta.enable) -- ver xdg.configFile."delta/config" más arriba
     yubikey-manager
     (callPackage ../../pkgs/librepods.nix { })
