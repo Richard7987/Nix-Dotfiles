@@ -95,6 +95,9 @@
     wget
     claude-code
     clamav # da el binario `clamscan` que invoca clamui (pkgs/clamui.nix, instalado vía home.nix)
+    uv # da `uvx` -- lanza el server MCP de kinocut (pip install kinocut aislado, sin venv manual)
+    ffmpeg # kinocut llama a los binarios ffmpeg/ffprobe por PATH -- mpv (modules/desktop.nix)
+           # linkea libav* como librería interna, pero no expone esos binarios sueltos.
   ];
 
   # Mantiene las firmas de virus actualizadas (freshclam) -- sin esto,
