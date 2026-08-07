@@ -72,17 +72,32 @@
   };
 
   # --- Gaming ---
-  programs.steam = {
-    enable = true;
-    remotePlay.openFirewall = true;
-    dedicatedServer.openFirewall = false;
-  };
+  # Steam DESACTIVADO (2026-08-07, a pedido explícito). Todo el bloque queda
+  # comentado en vez de borrado para poder reactivarlo con solo descomentar.
+  # programs.steam = {
+  #   enable = true;
+  #   remotePlay.openFirewall = true;
+  #   dedicatedServer.openFirewall = false;
+  #
+  #   # Proton-GE (GloriousEggroll) -- fork comunitario de Proton, mucho más
+  #   # compatible que el Proton oficial de Steam para juegos recientes/raros
+  #   # que todavía no tienen soporte oficial. Aparece en Steam como
+  #   # "GE-Proton" en la lista de herramientas de compatibilidad por juego.
+  #   extraCompatPackages = [ pkgs.proton-ge-bin ];
+  #
+  #   # Sesión Gamescope (el compositor de la Steam Deck) seleccionable desde
+  #   # el display manager -- arregla bugs de pantalla completa/resolución en
+  #   # varios juegos que no llevan bien correr directo sobre Hyprland.
+  #   gamescopeSession.enable = true;
+  # };
   programs.gamemode.enable = true;
 
   # --- CUDA ---
-  # Paquete grande (varios GB). Quítalo si al final no haces ML/compute con la GPU.
+  # Paquete grande (varios GB). DESACTIVADO (2026-08-07): sin uso de ML/compute
+  # en esta GPU por ahora y hacía falta liberar espacio (~8.5GB libres) para
+  # el gaming (Proton-GE/Heroic, ver arriba). Descomentar si hace falta CUDA.
   environment.systemPackages = with pkgs; [
-    cudaPackages.cudatoolkit
+    # cudaPackages.cudatoolkit
 
     # Diagnóstico gráfico: glxinfo (mesa-demos) y vulkaninfo (vulkan-tools),
     # para confirmar en cualquier momento qué GPU está renderizando de verdad
@@ -90,6 +105,19 @@
     # renderer activo).
     mesa-demos
     vulkan-tools
+
+    # mangohud # overlay de FPS/temperatura/uso de GPU -- activable por juego
+             # desde las propiedades de lanzamiento de Steam ("Habilitar
+             # overlay de MangoHud") o con `mangohud %command%`. DESACTIVADO
+             # junto con proton-ge/gamescope/heroic por espacio en disco
+             # (~8.5GB libres, 2026-08-07) -- descomentar junto con el resto.
+
+    # Heroic Games Launcher (Epic Games Store + GOG) -- DESACTIVADO a
+    # propósito: el disco tiene ~8.5GB libres (2026-08-07, `df -h /`) y no
+    # alcanza ni para el launcher en uso normal (descargas de juegos vía
+    # Epic/GOG se guardan aparte de la Nix store). Descomentar cuando haya
+    # más espacio en disco.
+    # heroic
 
     # Minecraft Java Edition. Reemplaza a prismlauncher (que sí estaba en
     # nixpkgs) por pedido explícito -- x-minecraft-launcher no tiene paquete
