@@ -1,0 +1,255 @@
+// ~/.config/niri/config.kdl
+// Config de niri (KDL) + integración con DankMaterialShell (DMS), como segunda
+// sesión mientras se prueba la migración desde Hyprland+Noctalia (hyprland.lua
+// sigue intacto). Docs: https://niri-wm.github.io/niri/ y
+// https://danklinux.com/docs/dankmaterialshell/
+//
+// niri recarga este archivo en caliente al guardar (`niri validate` también
+// disponible), pero acá es un symlink de solo lectura al store de Nix
+// (xdg.configFile en home.nix) -- cada ajuste real pasa por un rebuild.
+
+// --- Salida ---
+// eDP-1 es el panel interno, 1920x1080/15.3" (~144 PPI, no HiDPI) -- mismo
+// motivo que en Hyprland (hyprland.lua): scale=1 fijo en vez de dejar que el
+// compositor autodetecte, para no perder espacio lógico.
+output "eDP-1" {
+    scale 1
+}
+
+// --- Input ---
+input {
+    keyboard {
+        xkb {
+            layout "us"
+            variant "altgr-intl" // US con AltGr para acentos/ñ: AltGr+n = ñ, AltGr+' luego vocal = tilde
+        }
+        // Sin nodo `numlock`: en niri la sola PRESENCIA del nodo prende el
+        // numlock al arrancar -- no existe `numlock false`. Omitirlo entero
+        // es el equivalente al `numlock_by_default = false` explícito que
+        // pedías en Hyprland.
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+    }
+
+    // Mod = Super en un TTY real (este caso). Mod+MouseLeft/Right arrastra
+    // para mover/redimensionar ventanas flotantes -- es un gesto NATIVO de
+    // niri, no hace falta bindearlo (y bindear Mod+MouseLeft/Right a otra
+    // cosa lo pisaría).
+}
+
+// --- Layout ---
+layout {
+    gaps 10
+
+    // Sin bordes: ni focus-ring (el contorno de color en la ventana con foco)
+    // ni border (el que se dibuja en todas). Pedido explícito.
+    focus-ring {
+        off
+    }
+
+    border {
+        off
+    }
+}
+
+// Le pide a los clientes que dibujen SIN su propia barra de título con
+// botones (cerrar/redimensionar) -- server-side decoration en vez de
+// client-side. Junto con focus-ring/border en off (arriba), queda sin
+// ninguna decoración: ni la de niri ni la del cliente. Los apps que
+// respetan el pedido (la mayoría GTK/Qt "legacy CSD") quedan sin esa barra;
+// los que tienen su propia UI integrada de siempre (ej. libadwaita/GNOME
+// con header bar) pueden seguir mostrándola igual, eso ya no depende de
+// niri. Cerrar/mover/redimensionar queda por keybind (Mod+Q, Mod+arrastre).
+prefer-no-csd
+
+// Rounding no es una opción de layout en niri -- es una window-rule global
+// (geometry-corner-radius + clip-to-geometry), ver más abajo.
+window-rule {
+    geometry-corner-radius 20
+    clip-to-geometry true
+}
+
+// --- Overview: que el fondo sea el wallpaper real, no el backdrop-color gris ---
+// El Overview (Mod+O) por defecto solo pinta `backdrop-color` (gris sólido,
+// sin imagen) detrás de las columnas -- niri no "sabe" de wallpaper, ese
+// namespace es justo el mecanismo real para decirle que SÍ muestre una
+// superficie layer-shell de fondo ahí. Confirmado en vivo con
+// `niri msg layers`: DMS pinta el wallpaper en la capa "background" con
+// namespace "quickshell" (los demás widgets usan "dms:bar"/"dms:dock"/etc,
+// así que matchear "quickshell" a secas no les pega a esos). Mecanismo real
+// documentado en niri-wm/niri#4038 (place-within-backdrop).
+// Caveat conocido del mismo issue: si el wallpaper tiene una transición
+// ANIMADA al cambiar, el frame queda congelado durante esa animación
+// puntual con esto activado -- aceptable acá porque no es un fondo en
+// movimiento continuo, solo la transición al cambiar de wallpaper.
+layer-rule {
+    match namespace="^quickshell$"
+    place-within-backdrop true
+}
+
+// --- DankMaterialShell ---
+// SIN spawn-at-startup a propósito: DMS ahora arranca como servicio systemd
+// real (programs.dank-material-shell.systemd.enable = true en
+// modules/niri.nix), que trae Restart=on-failure -- un spawn-at-startup
+// suelto NO se relanza solo si el proceso muere (pasó en vivo: un
+// `dms restart` lo mató y se quedó sin barra/dock/wallpaper hasta
+// relanzarlo a mano). Ver el comentario largo en modules/niri.nix.
+
+// --- swaybg: workaround del wallpaper gris (bug real de DMS, ver arriba y
+// modules/niri.nix) --- lee la ruta actual directo del session.json de DMS
+// (no hardcodeada) para no competir con el wallpaper picker de DMS -- si
+// cambiás el wallpaper desde la UI de DMS, hace falta reiniciar niri (o
+// relanzar el spawn a mano) para que swaybg tome la nueva ruta. Probado en
+// vivo el 2026-08-08: la superficie de swaybg gana el z-order sobre la
+// (rota) de DMS en la misma capa Background y sí se ve. Sacar el día que se
+// confirme arreglado upstream.
+spawn-sh-at-startup "swaybg -o eDP-1 -i \"$(jq -r .wallpaperPath ~/.local/state/DankMaterialShell/session.json)\" -m fill"
+
+// --- Window rules: floating ---
+// niri ya auto-flota una ventana nueva si tiene parent toplevel (la mayoría
+// de los diálogos) O si es de tamaño fijo -- mucho más amplio que la
+// heurística de Hyprland (min==max nada más), así que hacen falta MENOS
+// reglas manuales que en hyprland.lua. Esto es justo lo que motivó explorar
+// la migración: el PiP de Zen y los diálogos GTK/Qt "grandes" que no tienen
+// parent ni tamaño fijo (selector de archivos, confirmaciones) igual
+// necesitan una regla explícita acá también.
+window-rule {
+    match app-id=r#"zen"# title="^Picture-in-Picture$"
+    open-floating true
+    default-column-width { fixed 480; }
+    default-window-height { fixed 270; }
+}
+
+// niri no tiene `pin`/always-on-top (a diferencia del pin=true que tenía
+// esta regla en Hyprland): el layer flotante siempre está sobre el tiling,
+// pero es por-workspace, no sigue entre workspaces.
+
+window-rule {
+    match app-id=r#"^(xdg-desktop-portal-gtk|xdg-desktop-portal-gnome|pavucontrol)$"#
+    open-floating true
+}
+
+window-rule {
+    match title=r#"^(Open File|Save As|Save File|Select a File|Choose Files|File Upload|Open Folder|Library)$"#
+    open-floating true
+}
+
+// Ventana de ajustes de DMS: flotante y con tamaño fijo (equivalente a la
+// regla que tenía Noctalia en hyprland.lua para `dev.noctalia.Noctalia`).
+// AJUSTAR app-id cuando se confirme en vivo (`niri msg windows` con la
+// ventana de settings de DMS abierta) -- placeholder razonable por ahora.
+window-rule {
+    match app-id=r#"^dev\.dankshell\.Settings$"#
+    open-floating true
+    default-column-width { fixed 1080; }
+    default-window-height { fixed 920; }
+}
+
+// --- Binds ---
+binds {
+    // Apps
+    Mod+Return { spawn "kitty"; } // AJUSTAR si cambia la terminal
+    Mod+B { spawn "zen-beta"; } // canal "default" del flake = beta -> binario zen-beta
+    Mod+Q repeat=false { close-window; }
+    Mod+F { fullscreen-window; } // fullscreen real (tapa barra/dock)
+    // maximize-column, NO maximize-window-to-edges: probado en vivo (2026-08-08)
+    // que maximize-window-to-edges va pegado a los bordes físicos (gap 0, ancho
+    // = pantalla completa), perdiendo el margen y el redondeado de esquinas.
+    // maximize-column ocupa casi todo el espacio pero respeta layout.gaps (queda
+    // un margen chico) y por lo tanto conserva geometry-corner-radius también.
+    Mod+M { maximize-column; }
+    Mod+V { toggle-window-floating; } // el bind que originó toda esta migración
+
+    // --- DMS: launcher / control center / settings / lock ---
+    // Verbos IPC confirmados contra danklinux.com/docs/dankmaterialshell/keybinds-ipc
+    // (lista completa de targets/acciones) y contra distro/nix/niri.nix real
+    // del flake (bindings que sí generan de fábrica). `dms ipc <target> <action>`
+    // sin "call" funciona igual -- el propio binario se lo antepone solo si falta
+    // (core/cmd/dms/shell.go: runShellIPCCommand).
+    Mod+Space { spawn "dms" "ipc" "spotlight" "toggle"; }
+    Mod+S { spawn "dms" "ipc" "control-center" "toggle"; }
+    Mod+Comma { spawn "dms" "ipc" "settings" "toggle"; }
+    Super+Alt+L { spawn "dms" "ipc" "lock" "lock"; }
+
+    // Screenshots -- "niri screenshot" es el modo interactivo/región (target
+    // "niri" son utilidades del propio compositor expuestas por DMS, no un
+    // panel del shell). screenshotScreen = pantalla completa.
+    Print { spawn "dms" "ipc" "niri" "screenshot"; }
+    Mod+Print { spawn "dms" "ipc" "niri" "screenshotScreen"; }
+
+    // Portapapeles -- se mantiene en SUPER+P (memoria muscular de
+    // hyprland.lua) en vez del Mod+P="notepad" que trae DMS por default.
+    Mod+P { spawn "dms" "ipc" "clipboard" "toggle"; }
+
+    // --- Foco direccional ---
+    // Asimétrico a propósito (idioma nativo de niri, no un capricho): en
+    // columnas, izquierda/derecha mueve el foco ENTRE columnas y
+    // arriba/abajo DENTRO de la columna actual.
+    Mod+Left  { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+Up    { focus-window-up; }
+    Mod+Down  { focus-window-down; }
+
+    // --- Workspaces 1-9 ---
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+    Mod+Shift+6 { move-column-to-workspace 6; }
+    Mod+Shift+7 { move-column-to-workspace 7; }
+    Mod+Shift+8 { move-column-to-workspace 8; }
+    Mod+Shift+9 { move-column-to-workspace 9; }
+
+    // Rueda del mouse = workspace siguiente/anterior (equivalente a
+    // mainMod+mouse_down/up de Hyprland).
+    Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
+    Mod+WheelScrollUp   cooldown-ms=150 { focus-workspace-up; }
+
+    // --- Teclas multimedia ---
+    // allow-when-locked=true: que sigan funcionando con la pantalla
+    // bloqueada, igual que documenta niri en su config por defecto.
+    XF86AudioRaiseVolume   allow-when-locked=true { spawn "dms" "ipc" "audio" "increment" "3"; }
+    XF86AudioLowerVolume   allow-when-locked=true { spawn "dms" "ipc" "audio" "decrement" "3"; }
+    XF86AudioMute          allow-when-locked=true { spawn "dms" "ipc" "audio" "mute"; }
+    XF86MonBrightnessUp    allow-when-locked=true { spawn "dms" "ipc" "brightness" "increment" "5" ""; }
+    XF86MonBrightnessDown  allow-when-locked=true { spawn "dms" "ipc" "brightness" "decrement" "5" ""; }
+}
+
+// --- Pendiente para Fase 2 (necesita la sesión corriendo en vivo) ---
+// - blur nativo (`blur { }` + `layer-rule { background-effect { blur true } }`)
+//   para las superficies de DMS -- falta el namespace real de sus layers
+//   (equivalente al `^noctalia-(bar-.+|notification|dock|...)$` que tenía
+//   Hyprland), se descubre con `niri msg layers` una vez que DMS esté corriendo.
+// - confirmar el app-id real de Zen bajo niri (`niri msg windows` con el PiP
+//   abierto) y de la ventana de settings de DMS, por si el match de arriba
+//   no alcanza.
+
+// --- Cursor ---
+// niri NO lee hyprcursor (a diferencia de Hyprland) -- usa XCURSOR_THEME/
+// XCURSOR_SIZE estándar, que home.pointerCursor de home.nix ya exporta vía
+// gtk.enable/su propio mecanismo. Se fija acá también para que niri lo tenga
+// aunque la sesión no herede bien la variable de entorno.
+cursor {
+    xcursor-theme "Bibata-Modern-Amber"
+    xcursor-size 24
+}
+
+// DMS Include Configs
+include "dms/windowrules.kdl"
+include "dms/outputs.kdl"
+include "dms/binds.kdl"
+include "dms/layout.kdl"
+include "dms/input.kdl"

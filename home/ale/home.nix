@@ -3,6 +3,7 @@
 {
   imports = [
     inputs.noctalia.homeModules.default
+    inputs.dank-material-shell.homeModules.default
   ];
 
   home.username = "ale";
@@ -182,6 +183,32 @@
 
   # --- Hyprland: config en Lua (ver home/ale/hyprland.lua) ---
   xdg.configFile."hypr/hyprland.lua".source = ./hyprland.lua;
+
+  # --- niri + DankMaterialShell: migración en curso, conviven con Hyprland+Noctalia ---
+  # (ver modules/niri.nix para el detalle completo del scoping). systemd.enable
+  # = false acá también, mismo motivo: DMS se lanza vía `spawn-at-startup` en
+  # niri.kdl en vez de como servicio systemd mientras las dos sesiones convivan.
+  #
+  # settings/session sin declarar A PROPÓSITO: el tema queda 100% dinámico
+  # (matugen deriva colores de lo que elijas en vivo desde la propia UI de DMS,
+  # wallpaper picker incluido) en vez de fijarlo desde Nix -- pedido explícito.
+  # Fijar acá `session.wallpaperPath` reafirmaría el mismo wallpaper en cada
+  # rebuild y pisaría cualquier cambio hecho desde la UI, el mismo problema que
+  # ya pasa con Noctalia (su settings.toml en runtime le gana al config.toml
+  # estático de Nix, ver NOTES.md) -- se elige explícitamente NO repetirlo acá.
+  # Todo lo que NO es tema (binds, window rules, arranque) sí queda declarado
+  # en niri.kdl / modules/niri.nix.
+  programs.dank-material-shell = {
+    enable = true;
+    systemd.enable = false;
+  };
+
+  # mkOutOfStoreSymlink en vez de source normal MIENTRAS se afina la config a
+  # ojo (niri recarga en caliente al guardar) -- volver a `source = ./niri.kdl`
+  # cuando quede estable, para que sea de nuevo un symlink de solo lectura al
+  # store como el resto de los xdg.configFile de este repo.
+  xdg.configFile."niri/config.kdl".source =
+    config.lib.file.mkOutOfStoreSymlink "/nixdots/home/ale/niri.kdl";
 
   # --- GPG / YubiKey ---
   # Opciones verificadas contra el módulo real de home-manager

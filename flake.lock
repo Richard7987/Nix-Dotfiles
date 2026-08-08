@@ -1,5 +1,59 @@
 {
   "nodes": {
+    "dank-material-shell": {
+      "inputs": {
+        "dank-qml-common": "dank-qml-common",
+        "flake-compat": "flake-compat",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786160171,
+        "narHash": "sha256-xnFMx/+a4Edo36QGiPicOOhtRpWPajoot5unGPaGcas=",
+        "owner": "AvengeMedia",
+        "repo": "DankMaterialShell",
+        "rev": "3c817dc0d023070a9450420530f6c9fa7c75054b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "AvengeMedia",
+        "repo": "DankMaterialShell",
+        "type": "github"
+      }
+    },
+    "dank-qml-common": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786121412,
+        "narHash": "sha256-XHNpDNfQfjP6nIscd26GK6ydgBdVN5gknYGOVxXBWLw=",
+        "owner": "AvengeMedia",
+        "repo": "dank-qml-common",
+        "rev": "28fde7311296cbd041e5b704e54a481082b92b18",
+        "type": "github"
+      },
+      "original": {
+        "owner": "AvengeMedia",
+        "repo": "dank-qml-common",
+        "type": "github"
+      }
+    },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1767039857,
+        "narHash": "sha256-vNpUSpF5Nuw8xvDLj2KCwwksIbjua2LZCqhV1LNRDns=",
+        "owner": "NixOS",
+        "repo": "flake-compat",
+        "rev": "5edf11c44bc78a0d334f6334cdaf7d60d732daab",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -177,6 +231,7 @@
     },
     "root": {
       "inputs": {
+        "dank-material-shell": "dank-material-shell",
         "gruvbox-wallpapers": "gruvbox-wallpapers",
         "home-manager": "home-manager",
         "nezzontli-ctl": "nezzontli-ctl",

@@ -19,6 +19,17 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # niri + DankMaterialShell (migración en curso, ver NOTES.md/plan) --
+    # conviven con Hyprland+Noctalia como segunda sesión mientras se prueba.
+    # Solo se usan los módulos NixOS/home-manager del propio flake
+    # (programs.dank-material-shell.*), NO su módulo `niri` (distro/nix/niri.nix
+    # exige sodiboo/niri-flake, que no se agrega -- el config.kdl se escribe a
+    # mano contra el módulo `programs.niri` que ya trae nixpkgs).
+    dank-material-shell = {
+      url = "github:AvengeMedia/DankMaterialShell";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     zen-browser = {
       url = "github:0xc000022070/zen-browser-flake";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -62,6 +73,7 @@
     , home-manager
     , noctalia
     , noctalia-greeter
+    , dank-material-shell
     , zen-browser
     , gruvbox-wallpapers
     , psysonic
@@ -85,6 +97,7 @@
           ./hosts/ale/configuration.nix
           noctalia.nixosModules.default
           noctalia-greeter.nixosModules.default
+          dank-material-shell.nixosModules.default
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;

@@ -7,6 +7,7 @@
     ../../modules/yubikey.nix
     ../../modules/tailscale.nix
     ../../modules/desktop.nix
+    ../../modules/niri.nix
   ];
 
   # --- Boot ---
