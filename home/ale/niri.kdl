@@ -173,10 +173,18 @@ binds {
     Mod+Comma { spawn "dms" "ipc" "settings" "toggle"; }
     Super+Alt+L { spawn "dms" "ipc" "lock" "lock"; }
 
-    // Screenshots -- "niri screenshot" es el modo interactivo/región (target
-    // "niri" son utilidades del propio compositor expuestas por DMS, no un
-    // panel del shell). screenshotScreen = pantalla completa.
-    Print { spawn "dms" "ipc" "niri" "screenshot"; }
+    // Print a secas -> Screen Capture Toolbar (plugin de terceros del
+    // registro de complementos de DMS: barra flotante con foto/video/
+    // región/pantalla completa/ventana, usa gpu-screen-recorder para
+    // grabar). Comando real confirmado en el log de DMS al cargar el
+    // plugin ("screenCaptureToolbar: daemon loaded -- use 'dms ipc
+    // screenCaptureToolbar toggle' to open") y probado en vivo (2026-08-08).
+    // Reemplaza al "niri screenshot" interactivo que estaba acá antes -- la
+    // barra ya cubre ese caso (botón de foto) además de grabar video.
+    Print { spawn "dms" "ipc" "screenCaptureToolbar" "toggle"; }
+
+    // Mod+Print se deja aparte: captura de pantalla completa YA, sin abrir
+    // la barra -- más rápido cuando no hace falta elegir región/opciones.
     Mod+Print { spawn "dms" "ipc" "niri" "screenshotScreen"; }
 
     // Portapapeles -- se mantiene en SUPER+P (memoria muscular de

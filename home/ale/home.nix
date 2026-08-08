@@ -185,9 +185,14 @@
   xdg.configFile."hypr/hyprland.lua".source = ./hyprland.lua;
 
   # --- niri + DankMaterialShell: migración en curso, conviven con Hyprland+Noctalia ---
-  # (ver modules/niri.nix para el detalle completo del scoping). systemd.enable
-  # = false acá también, mismo motivo: DMS se lanza vía `spawn-at-startup` en
-  # niri.kdl en vez de como servicio systemd mientras las dos sesiones convivan.
+  # systemd.enable = false ACÁ a propósito: el servicio systemd real
+  # (Restart=on-failure) ya lo crea el módulo NixOS en modules/niri.nix
+  # (programs.dank-material-shell.systemd.enable = true ahí) -- si este
+  # módulo home-manager TAMBIÉN lo creara, quedarían dos unidades "dms"
+  # distintas (una por /etc/systemd/user/, otra por ~/.config/systemd/user/)
+  # peleando por el mismo bus. Confirmado en vivo (2026-08-08, ver NOTES.md)
+  # que hace falta supervisión systemd real: un spawn-at-startup sin
+  # supervisor no se relanza solo si el proceso muere.
   #
   # settings/session sin declarar A PROPÓSITO: el tema queda 100% dinámico
   # (matugen deriva colores de lo que elijas en vivo desde la propia UI de DMS,
@@ -202,6 +207,26 @@
     enable = true;
     systemd.enable = false;
   };
+
+  # --- VoxType: dictado por voz (plugin voxTypeOsd de DMS, ya instalado en
+  # ~/.config/DankMaterialShell/plugins/) ---
+  # El plugin tiraba "VoxType is required -- Install VoxType and ensure the
+  # voxtype command is available on PATH" porque el binario no estaba
+  # instalado en absoluto. Módulo real de home-manager (modules/services/
+  # voxtype.nix del input home-manager) -- instala el paquete y arma
+  # voxtype.service (systemd de usuario, Restart=on-failure) corriendo
+  # `voxtype daemon`. wayland.display/x11.display quedan sin setear a
+  # propósito: niri-session ya corre `dbus-update-activation-environment
+  # --all` al arrancar (confirmado en vivo, ver NOTES.md sobre por qué
+  # graphical-session.target sí se activa acá), así que WAYLAND_DISPLAY ya
+  # le llega solo al entorno systemd de usuario sin hardcodear el nombre
+  # del socket (podría cambiar entre sesiones).
+  #
+  # loadModels sin declarar a propósito -- requiere elegir motor/idioma
+  # (whisper base/base.en/small/etc.) y bajar el modelo (cientos de MB),
+  # decisión del usuario. Correr a mano una vez:
+  #   voxtype setup --download --model <nombre>
+  services.voxtype.enable = true;
 
   # mkOutOfStoreSymlink en vez de source normal MIENTRAS se afina la config a
   # ojo (niri recarga en caliente al guardar) -- volver a `source = ./niri.kdl`
