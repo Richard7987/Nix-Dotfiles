@@ -98,7 +98,12 @@
     uv # da `uvx` -- lanza el server MCP de kinocut (pip install kinocut aislado, sin venv manual)
     ffmpeg # kinocut llama a los binarios ffmpeg/ffprobe por PATH -- mpv (modules/desktop.nix)
            # linkea libav* como librería interna, pero no expone esos binarios sueltos.
+    appimage-run # ejecuta el AppImage de idevice_pair (pairing con iPhone para SideStore)
   ];
+
+  # usbmuxd: demonio que expone el iPhone conectado por USB como socket local
+  # (/var/run/usbmuxd) -- sin esto, idevice_pair no encuentra el dispositivo.
+  services.usbmuxd.enable = true;
 
   # Mantiene las firmas de virus actualizadas (freshclam) -- sin esto,
   # clamscan/clamui funcionan pero con una base de datos que envejece.
