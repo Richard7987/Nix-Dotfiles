@@ -2441,3 +2441,111 @@ firma **todos** los commits con la YubiKey (GPG) automáticamente, no
 solo los tags -- README actualizado, sección de firma pasada de `got
 tag -S`/`got tag -V` (SSH) a `git tag -s`/`git tag -v` (GPG, misma
 llave que ya firma los commits).
+
+## Migración a niri + DankMaterialShell, Fase 1: agregado como segunda sesión (2026-08-08)
+
+**Disparador real:** en Hyprland, el PiP de Zen y varios diálogos GTK/Qt se
+tileaban en vez de flotar (Hyprland solo auto-flota si `min==max` en los
+size hints; ni el PiP de Firefox/Zen ni los diálogos "grandes" lo declaran).
+Explorando el arreglo (agregado como `hl.window_rule` en `hyprland.lua`,
+commit `478add6`) se decidió evaluar niri en paralelo: su heurística de
+auto-float es más amplia (flota si tiene parent toplevel -- la mayoría de
+los diálogos -- O si es tamaño fijo), así que el problema original se
+resuelve con menos reglas manuales. Plan completo de la migración guardado
+en `/home/ale/.claude/plans/pure-strolling-hartmanis.md`. Tag
+`pre-niri-migration` en el commit previo a empezar, por si hace falta volver.
+
+**Decisión de arquitectura: nixpkgs para niri, flake propio de DMS, nada de
+niri-flake.** `programs.niri` (enable/package/useNautilus) ya viene en
+nixpkgs 26.11 (niri 26.04). Para DankMaterialShell se agregó el input
+`dank-material-shell` (`programs.dank-material-shell.*`) en vez de los
+módulos `programs.dms-shell`/`services.displayManager.dms-greeter` que
+también trae nixpkgs -- se necesitaban los settings/session declarativos y
+`lockscreen.securityKey` (YubiKey) que solo tiene el módulo del flake. El
+módulo `homeModules.niri` del propio flake de DMS se descartó: exige
+`programs.niri.settings` de sodiboo/niri-flake (que no se agregó, para no
+tener dos módulos declarando `programs.niri.enable` a la vez) y además así
+se evita de raíz el issue AvengeMedia/DankMaterialShell#1788 (`dms setup`
+intentando escribir dentro de `~/.config/niri`, que home-manager deja de
+solo lectura) -- `home/ale/niri.kdl` se escribe entero a mano.
+
+**xwayland-satellite hay que agregarlo aparte.** El módulo de niri de
+nixpkgs pasa `enableXWayland = false` (correcto, no usa el Xwayland
+"rootful") pero NO instala `xwayland-satellite` -- sin él, IntelliJ IDEA,
+TeXstudio, LibreOffice y Steam fallarían en silencio. Agregado a
+`environment.systemPackages` en `modules/niri.nix`. Confirmado en vivo con
+IntelliJ IDEA: abrió con ventana real (`app-id: jetbrains-idea`) vía
+xwayland-satellite, log `listening on X11 socket: :0` en `niri.service`.
+
+**Incidente real en vivo: `dms restart` mató el proceso y no se relanzó
+solo.** Se había arrancado DMS vía `spawn-at-startup "dms" "run"` en
+`niri.kdl` (con `programs.dank-material-shell.systemd.enable = false`) para
+que corriera SOLO bajo niri sin competir con Noctalia bajo Hyprland -- el
+mismo criterio de precaución que ya usaba Noctalia (loop de shell en vez de
+systemd) porque en este equipo `graphical-session.target` nunca se activa
+bajo Hyprland. Probando `dms restart` (manda SIGUSR1) el proceso murió del
+todo y la sesión quedó sin barra/dock/wallpaper hasta relanzarlo a mano.
+**Hallazgo que cambió el plan:** confirmado que bajo niri SÍ se activa
+`graphical-session.target` (`niri-session` corre
+`dbus-update-activation-environment --all` y arranca `niri.service`, que es
+`BindsTo=`/`Before=graphical-session.target` -- confirmado también en vivo
+con `systemctl --user is-active graphical-session.target` -> `active`), y
+que el propio `dms.service` (`assets/systemd/dms.service` del proyecto)
+trae `Restart = "on-failure"`. Como Hyprland en este equipo nunca activa ese
+target, no hay riesgo real de que arranquen dos instancias peleando por el
+bus (la advertencia de upstream sobre no combinar systemd+spawn no aplica
+acá) -- se adelantó ese paso de la Fase 3: `systemd.enable = true` en
+`modules/niri.nix`, se sacó el `spawn-at-startup` de `niri.kdl`. Recuperación
+en vivo: matar el proceso manual y `systemctl --user start dms.service`.
+
+**Bug real y sin arreglo confirmado de DMS: wallpaper gris fuera del
+Overview.** El escritorio normal (namespace de capa `quickshell`) mostraba
+gris sólido en vez del wallpaper, aunque el Overview (`Mod+O`) sí lo pintaba
+bien tras agregar el `layer-rule` con `place-within-backdrop true`
+(mecanismo real documentado en niri-wm/niri#4038). Descartado: archivo
+corrupto (`identify` lo confirmó válido), `dms doctor` (sin errores
+relevantes), `session.json`/IPC (`wallpaperPath` correcto), "profiles" de
+`dms ipc outputs` (es otra cosa, perfiles de disposición de monitores, no
+wallpaper). Coincide con AvengeMedia/DankMaterialShell#2299 ("Gray
+wallpapers"), reportado sin resolver por varios usuarios en niri 26.04 --
+el hilo lo asocia a apagado/reconexión de monitor (DPMS, suspender,
+desconectar un externo), no a una versión de niri en particular, así que
+bajar la versión de niri no es un arreglo prometedor. Restart limpio del
+servicio + `dms ipc wallpaper set` (dos veces) NO lo arreglaron en este
+equipo. **Workaround aplicado:** `swaybg` como segunda superficie en la
+misma capa Background (namespace `wallpaper`), lanzado vía
+`spawn-sh-at-startup` leyendo `wallpaperPath` directo de
+`~/.local/state/DankMaterialShell/session.json` con `jq` (no hardcodeado,
+sigue lo que sea que DMS tenga elegido) -- confirmado en vivo que gana el
+z-order sobre la superficie rota de DMS y sí se ve. Paquetes `swaybg`/`jq`
+agregados a `modules/niri.nix`. Sacar el día que se confirme arreglado
+upstream.
+
+**Verificación de la Fase 2, todo confirmado en vivo:**
+- Grabación de pantalla: `gpu-screen-recorder -w eDP-1` (captura KMS,
+  compositor-agnóstica por diseño) sin ningún `vaInitialize failed` ni error
+  de EGL -- el problema que rompía esto bajo Hyprland+Noctalia con Nvidia
+  PRIME no aparece acá. Video verificado válido con `ffprobe`
+  (1920x1080, h264+opus).
+- Apps X11 (IntelliJ IDEA) y portales (`xdg-desktop-portal-gnome`),
+  gnome-keyring, PiP de Zen flotando, diálogos de archivo flotando: todo
+  confirmado funcionando.
+
+**Detalles menores resueltos en la misma ronda:** `prefer-no-csd` (sin barra
+de título con botones cerrar/redimensionar -- pedido explícito, ya no se
+usan); `focus-ring`/`border` en `off` (sin bordes de ventana); `Mod+M` ->
+`maximize-column`, NO `maximize-window-to-edges` -- confirmado en vivo que
+esta última va a los bordes físicos de la pantalla (gap 0, pierde el margen
+y el redondeado de esquinas), mientras que `maximize-column` respeta
+`layout.gaps` (ancho 1912 contra pantalla de 1920) y por lo tanto conserva
+también `geometry-corner-radius`. app-id real de la ventana de ajustes de
+DMS confirmado en vivo: `com.danklinux.dms` (no el placeholder inicial
+`dev.dankshell.Settings`).
+
+**Pendiente para la Fase 3** (limpieza, sacar Hyprland+Noctalia -- recién
+cuando niri termine de convencer con más uso real): ver el plan completo en
+`/home/ale/.claude/plans/pure-strolling-hartmanis.md`. Puntualmente
+pendiente de la Fase 2: blur nativo de niri para las superficies de DMS
+(falta el namespace real de sus layers, `niri msg layers` los lista
+distinto a `dms:bar`/`dms:dock`), y confirmar el app-id real de Zen bajo
+niri si el match por substring `"zen"` alguna vez da falso positivo.
