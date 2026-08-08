@@ -110,6 +110,32 @@ hl.window_rule({
   size = { 1080, 920 },
 })
 
+-- Hyprland solo auto-flota una ventana nueva si esta declara min==max en
+-- sus size hints (o pide modal) -- Zen/Firefox no lo hace para su ventana
+-- de Picture-in-Picture, ni la mayoría de los diálogos GTK/Qt "grandes"
+-- (selector de archivos, confirmaciones, etc.), así que sin regla explícita
+-- Hyprland las tilea como una ventana normal en vez de dejarlas flotando.
+-- (wiki.hypr.land/Configuring/Window-Rules/ -- sección "Example window
+-- rules that are useful")
+hl.window_rule({
+  name = "float-pip",
+  match = { title = "^(Picture-in-Picture)$" },
+  float = true,
+  pin = true, -- que se quede visible arriba del resto al cambiar de workspace
+})
+
+hl.window_rule({
+  name = "float-common-dialogs",
+  match = { class = "^(xdg-desktop-portal-gtk|xdg-desktop-portal-hyprland|file_progress|confirm|confirmreset|dialog|download|notification|error|pavucontrol)$" },
+  float = true,
+})
+
+hl.window_rule({
+  name = "float-common-dialog-titles",
+  match = { title = "^(Open File|Save As|Save File|Select a File|Choose Files|File Upload|Open Folder|Library|About .*)$" },
+  float = true,
+})
+
 -- --- Apps / básicos ---
 hl.bind(mainMod .. "+Return", hl.dsp.exec_cmd("kitty")) -- AJUSTAR si usas otra terminal
 hl.bind(mainMod .. "+B", hl.dsp.exec_cmd("zen-beta")) -- canal "default" del flake = beta -> binario zen-beta
