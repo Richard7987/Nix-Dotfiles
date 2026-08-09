@@ -24,7 +24,7 @@
   # que el binario curl aparezca en el PATH de toda sesión (gráfica y
   # terminales nuevas) -- antes solo la terminal donde corrió el instalador
   # lo tenía, porque el script no toca .zshrc/.bashrc/.zprofile.
-  home.sessionPath = [ "$HOME/.opencode/bin" ];
+  home.sessionPath = [ "$HOME/.opencode/bin" "$HOME/.local/bin" ];
 
   # --- Carpetas XDG estándar ---
   # Antes solo existían Pictures/Videos/Downloads creadas a mano (más una
@@ -649,6 +649,11 @@
     unzip # usado por varios plugins de nvim al descomprimir descargas (ej. releases de GitHub)
     gcc # fallback nativo de blink.cmp si no baja su binario prebuilt
     gnumake # ídem
+    bubblewrap # bwrap -- requerido por claude-science para su sandbox
+      # (sin esto corre unsandboxed con --dangerously-no-sandbox, full
+      # read/write de $HOME y red sin restricción)
+    socat # requerido también por claude-science: puentea la red del
+      # sandbox de Linux (bwrap aísla la red; socat es el bridge)
 
     # --- LSPs/formatters/linters de los extras de LazyVim (ver lazyvim.json) ---
     # Mason (el instalador default de LazyVim) no funciona en NixOS: no
