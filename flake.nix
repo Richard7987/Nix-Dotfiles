@@ -30,6 +30,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # DankCalendar (dcal): sync CalDAV/Nextcloud/Google/etc. para el widget de
+    # calendario de DMS -- vía módulo home-manager propio del flake, no hay
+    # paquete en nixpkgs (ver home/ale/home.nix, programs.dank-calendar).
+    dankcalendar = {
+      url = "github:AvengeMedia/dankcalendar";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     zen-browser = {
       url = "github:0xc000022070/zen-browser-flake";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -74,6 +82,7 @@
     , noctalia
     , noctalia-greeter
     , dank-material-shell
+    , dankcalendar
     , zen-browser
     , gruvbox-wallpapers
     , psysonic

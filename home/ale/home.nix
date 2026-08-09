@@ -4,6 +4,7 @@
   imports = [
     inputs.noctalia.homeModules.default
     inputs.dank-material-shell.homeModules.default
+    inputs.dankcalendar.homeModules.default
   ];
 
   home.username = "ale";
@@ -206,6 +207,22 @@
   programs.dank-material-shell = {
     enable = true;
     systemd.enable = false;
+  };
+
+  # --- DankCalendar: sync CalDAV (Nextcloud) para el widget de calendario de
+  # DMS. Acá sí systemd.enable = true (a diferencia de dank-material-shell
+  # arriba) porque solo se importa el módulo home-manager de este flake, no
+  # el nixosModules -- no hay riesgo de doble unit peleando por el bus.
+  # Cuenta de Nextcloud se agrega a mano una sola vez (no va en Nix, son
+  # credenciales): `dcal account add caldav --url
+  # https://TU-NEXTCLOUD/remote.php/dav/calendars/TU_USUARIO/TU_CALENDARIO/
+  # --username TU_USUARIO --name "Nextcloud"`.
+  programs.dank-calendar = {
+    enable = true;
+    systemd.enable = true;
+    # firstDayOfWeek: -1 (default) = sigue el locale, 0 = domingo, ..., 6 =
+    # sábado (ver Common/SettingsData.qml del propio DMS/DankCalendar).
+    settings.firstDayOfWeek = 0;
   };
 
   # --- VoxType: dictado por voz (plugin voxTypeOsd de DMS, ya instalado en
