@@ -63,12 +63,15 @@
     };
   };
 
-  # Variables recomendadas para Nvidia + Wayland/Hyprland en modo sync
+  # Variables recomendadas para Nvidia + Wayland en modo sync.
+  # WLR_NO_HARDWARE_CURSORS (workaround típico de compositores wlroots +
+  # Nvidia) sacado -- niri es Smithay, no wlroots, no lo lee; era para
+  # Hyprland/noctalia-greeter, ambos ya removidos (Fase 3 de la migración a
+  # niri+DMS, ver NOTES.md).
   environment.sessionVariables = {
     LIBVA_DRIVER_NAME = "nvidia";
     GBM_BACKEND = "nvidia-drm";
     __GLX_VENDOR_LIBRARY_NAME = "nvidia";
-    WLR_NO_HARDWARE_CURSORS = "1";
   };
 
   # --- Gaming ---

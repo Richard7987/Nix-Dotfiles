@@ -2549,3 +2549,304 @@ pendiente de la Fase 2: blur nativo de niri para las superficies de DMS
 (falta el namespace real de sus layers, `niri msg layers` los lista
 distinto a `dms:bar`/`dms:dock`), y confirmar el app-id real de Zen bajo
 niri si el match por substring `"zen"` alguna vez da falso positivo.
+
+## Migración a niri + DankMaterialShell, Fase 3: limpieza final, sale Hyprland+Noctalia (2026-08-10)
+
+Después de varios días usando niri a diario sin problemas (Fase 2 confirmada
+el 2026-08-08), se decide dar por terminada la migración: Hyprland,
+Noctalia y noctalia-greeter salen del todo del sistema. niri+DMS pasa a ser
+la única sesión.
+
+**`flake.nix`:** sacados los inputs `noctalia` y `noctalia-greeter`, sus dos
+`nixosModules.default`, y el bloque `disabledModules = [
+"programs/wayland/noctalia.nix" ]` (ya no hace falta: sin el módulo del
+input noctalia, no hay colisión de namespace con el módulo nativo de
+nixpkgs). Descripción del flake actualizada.
+
+**`hosts/ale/configuration.nix`:** sacado el substituter+key de
+`noctalia.cachix.org` (se queda el de `psysonic.cachix.org`).
+
+**`modules/desktop.nix`:** sacados `programs.hyprland.enable`,
+`programs.noctalia` y `programs.noctalia-greeter`. En su lugar,
+`services.displayManager.dms-greeter`:
+
+```nix
+services.displayManager.dms-greeter = {
+  enable = true;
+  package = config.programs.dank-material-shell.package;
+  quickshell.package = config.programs.dank-material-shell.quickshell.package;
+  compositor.name = "niri";
+  configHome = "/home/ale";
+};
+```
+
+`package`/`quickshell.package` pineados EXPLÍCITAMENTE al paquete del flake
+de DMS -- confirmado leyendo el módulo real
+(`nixos/modules/services/display-managers/dms-greeter.nix` de nixpkgs) que
+el default cae a `config.programs.dms-shell.package` (el módulo NATIVO de
+nixpkgs, `pkgs.dms-shell`), no al de `programs.dank-material-shell` (el del
+flake de AvengeMedia que usa el resto de este repo) -- sin este pin habría
+skew de versión entre el DMS real de la sesión y el que corre en el
+greeter, justo el problema que ya preveía el plan original.
+`security.polkit.enablePkexecWrapper` se queda (lo sigue necesitando
+gamemode); `services.gnome.gnome-keyring.enable` también (ya no solo por
+Noctalia -- DankCalendar también guarda credenciales CalDAV por libsecret,
+confirmado en `core/cmd/dcal/keyring_migrate.go` del propio flake de
+dankcalendar). `python3` (solo existía para el template `kcolorscheme` de
+Noctalia, que era un script Python) sale del todo -- DMS trae su propio
+template `kcolorscheme` vía matugen (`quickshell/matugen/configs/
+kcolorscheme.toml` del flake de DMS), sin Python de por medio.
+
+**`modules/graphics.nix`:** sacado `WLR_NO_HARDWARE_CURSORS` de
+`environment.sessionVariables` -- era un workaround típico de compositores
+wlroots + Nvidia (Hyprland y el compositor propio de noctalia-greeter, ambos
+wlroots); niri es Smithay, no lo lee, así que ya no le servía a nadie.
+
+**`home/ale/home.nix`:** sacados el import de
+`inputs.noctalia.homeModules.default`, todo el bloque `programs.noctalia`
+(quedó `home.file."Pictures/Wallpapers/gruvbox"`, que DMS también usa como
+directorio del wallpaper picker), `hyprcursor.enable` (niri no lo lee) y el
+`xdg.configFile."hypr/hyprland.lua"`. `home/ale/hyprland.lua` borrado del
+repo. `xdg.configFile."niri/config.kdl"` vuelve a `source = ./niri.kdl`
+(era `mkOutOfStoreSymlink` mientras se afinaba en vivo durante la Fase 2,
+ver esa entrada) -- ya estable, vuelve a ser symlink de solo lectura al
+store como el resto de la config.
+
+`programs.dank-material-shell.systemd.enable` en `modules/niri.nix` (nivel
+NixOS) ya estaba en `true` desde el incidente de supervisión de la Fase 2
+-- ese paso del plan original ("invertir el scoping") ya estaba hecho antes
+de esta ronda, no hizo falta tocarlo de nuevo.
+
+**Theming: arreglado un problema real, no solo cosmético.** Con Noctalia
+recién sacado, dos apps quedaban con el tema roto porque el DMS SÍ estaba
+escribiendo sus templates matugen, pero los archivos "de entrada" del
+usuario en `$HOME` (fuera del store, fuera de Nix a propósito -- el tema es
+lo único que se deja dinámico en esta config) seguían apuntando a los de
+Noctalia:
+
+- `~/.config/gtk-{3,4}.0/gtk.css` tenía **ambas** líneas, `@import
+  url("dank-colors.css")` seguida de `@import url("noctalia.css")` -- en
+  cascada CSS gana la última, así que Noctalia seguía "ganando"
+  visualmente aunque DMS ya escribía `dank-colors.css` al lado. Se dejó
+  solo el import de `dank-colors.css`.
+- `~/.config/kitty/kitty.conf` seguía con `include themes/noctalia.conf`
+  sin ningún `include` a los archivos que DMS sí generaba
+  (`dank-theme.conf`, `dank-tabs.conf` -- confirmados con mtime de hoy,
+  DMS los actualiza solo). Cambiado a incluir esos dos.
+- Confirmado leyendo `core/internal/matugen/matugen.go` del flake de DMS:
+  tanto el GTK como el color scheme de KDE (`kdeglobals`) son "opt-in" --
+  DMS solo los toca si detecta que el usuario ya apunta a sus archivos
+  (`isDMSGTKActive`/`isDMSKDEColorSchemeActive`), mismo patrón que Noctalia
+  no tenía. Si Kleopatra/pinentry-qt no muestran los colores de matugen,
+  hace falta elegir "DankMatugen" como color scheme de KDE una vez desde
+  Configuración del sistema (o `plasma-apply-colorscheme DankMatugenDark`).
+- `btop` (`color_theme = "noctalia"`) y `yazi`
+  (`~/.config/yazi/theme.toml`, `dark/light = "noctalia"`) quedan **sin
+  arreglo real**: DMS no trae template propio para ninguno de los dos (a
+  diferencia de Noctalia, que sí los tenía). Los archivos de tema de
+  Noctalia (`~/.config/btop/themes/noctalia.theme`,
+  `~/.config/yazi/flavors/noctalia.yazi`) siguen ahí y siguen funcionando,
+  solo que congelados en la última paleta que Noctalia generó -- no se
+  actualizan más al cambiar de wallpaper. No bloqueante, cosmético.
+
+**No borrado a propósito:** `~/.local/state/noctalia/` y
+`~/.cache/noctalia/` (layout de la barra, dock con apps pinneadas, cuenta
+CalDAV vieja, cache de temas de community templates) se dejan intactos --
+es estado de runtime fuera de Nix, sin costo de mantenerlo, y borrarlo
+sería irreversible si alguna vez hace falta consultar cómo estaba
+configurado Noctalia. Se puede limpiar a mano cuando se quiera.
+
+**Estado final:** niri + DankMaterialShell es la única sesión del sistema.
+Sin segunda sesión de respaldo -- el tag `pre-niri-migration` (creado antes
+de la Fase 1) sigue siendo el punto de rollback más antiguo disponible si
+hiciera falta reconstruir todo desde cero.
+
+### Bug post-switch: `dms-greeter` roto al reiniciar -- input de DMS sin pin de versión (2026-08-10)
+
+Tras el switch de la Fase 3 y el primer reinicio real, la consola mostró en
+texto plano (capturado en foto):
+
+```
+.../dms-shell-1.6-beta+date=2026-08-08_3c817dc/share/quickshell/dms/Modules/Greetd/assets/dms-greeter: No existe el fichero o el directorio
+sh: /nix/store/.../dms-shell-1.6-beta+.../share/quickshell/dms/Modules/Greetd/assets/dms-greeter: No existe el fichero o el directorio
+```
+
+**Causa raíz confirmada leyendo el store real:** el input `dank-material-shell`
+de `flake.nix` no tenía ningún `ref`/tag -- flotaba en la rama `main` de
+AvengeMedia/DankMaterialShell, pineado a un commit post-1.5.3 ("1.6-beta",
+2026-08-08) que ya había reestructurado el árbol de quickshell: `Modules/
+Greetd/` (con el launcher `assets/dms-greeter` que invoca el módulo NixOS)
+ya no existe ahí, movido/rediseñado bajo `Modals/Greeter/` +
+`Services/GreeterService.qml`. `services.displayManager.dms-greeter` de
+nixpkgs (`nixos/modules/services/display-managers/dms-greeter.nix`) tiene
+esa ruta **hardcodeada** -- fue escrito contra el layout del último tag
+publicado (v1.5.3, exactamente lo que usa `pkgs.dms-shell` de nixpkgs, que
+si tiene ese archivo, confirmado comparando ambos paquetes en el store).
+No hay ningún tag v1.6 todavía (`git ls-remote --tags` sobre el repo real).
+
+A pesar del error, `ale` sí lograba loguearse (confirmado con
+`journalctl -b -u greetd`: sesión de `greeter`(999) seguida ~12s después por
+una de `ale`(1000)) -- greetd no se cuelga si el comando de la sesión falla,
+pero la experiencia al reiniciar quedaba rota/fea.
+
+**Fix:** pinear el input a `github:AvengeMedia/DankMaterialShell/v1.5.3` (el
+mismo tag que usa `pkgs.dms-shell` de nixpkgs) en vez de la rama `main` sin
+`ref`. Confirmado en el store real tras el rebuild que
+`share/quickshell/dms/Modules/Greetd/assets/dms-greeter` vuelve a existir en
+el paquete resuelto. `nix flake lock --update-input dank-material-shell`
+además sacó el input transitivo `dank-qml-common` (ya no lo trae este tag).
+
+**Lección para el futuro:** cualquier input de flake que alimente un módulo
+de **nixpkgs** que asuma un layout de archivos interno (no solo una API
+pública estable) debería pinearse a un tag/release, no a la rama de
+desarrollo -- nixpkgs se escribe y prueba contra releases, no contra HEAD.
+
+### Post-switch, dos arreglos más: plugin VoxType OSD mal instalado, y LibrePods crasheando al arrancar (2026-08-10)
+
+Tras el switch con el pin de DMS a v1.5.3, quedaban dos cosas rotas que no
+tenían que ver con ese cambio:
+
+**VoxType OSD con instalación corrupta.** `~/.config/DankMaterialShell/
+plugins/voxTypeOsd/` tenía solo un `.git` vacío (sin objects/refs reales, sin
+`plugin.json` ni QML) -- quedó así desde que se instaló originalmente (Fase
+2). `dms plugins list` no lo contaba entre los instalados (por eso el log de
+`dms.service` tiraba "manifest load failed ... 2", ENOENT) pero `dms plugins
+browse` sí lo marcaba `[Installed]` (solo mira si el directorio existe, no si
+tiene contenido válido). Arreglado con `dms plugins uninstall voxTypeOsd` +
+`dms plugins install voxTypeOsd` -- reinstalación limpia, confirmado en el
+log de `dms.service` tras `systemctl --user restart dms.service`: "DankBar:
+Plugin loaded: voxTypeOsd" / "Daemon plugin loaded: voxTypeOsd", sin
+warnings. Dependencias del plugin (`voxtype`, `voxtype-audio-bridge`) ya
+estaban en PATH desde `services.voxtype.enable` (home.nix).
+
+**LibrePods crasheaba (SIGABRT) 2-3 veces al arrancar antes de estabilizarse.**
+Backtrace real vía `coredumpctl info <pid>`: panic en Rust dentro de
+`winit::platform_impl::linux::common::xkb::Context::new`, que llama a
+`xkb_compose_table_new_from_locale()` de libxkbcommon al recibir la
+capability de teclado del seat de Wayland -- esa llamada devolvía error y el
+código de winit hacía `.unwrap()` sobre el resultado. Causa raíz: sin
+`XLOCALEDIR` seteada, libxkbcommon busca los archivos Compose (dead
+keys/secuencias) en el path FHS clásico `/usr/share/X11/locale`, que no
+existe en NixOS -- confirmado que ese directorio no existe bajo
+`/run/current-system/sw` y que `XLOCALEDIR` estaba vacía en el entorno de
+systemd --user. El fix, ya en `modules/desktop.nix`
+(`environment.sessionVariables.XLOCALEDIR = "${pkgs.libx11}/share/X11/locale"`),
+se confirmó en vivo corriendo el binario de LibrePods a mano con la variable
+puesta (`timeout 4 env XLOCALEDIR=... librepods --start-minimized`): arranca
+limpio, sin panics, durante los 4s de la prueba. Se puso a nivel global
+(`environment.sessionVariables`, no solo en el `systemd.user.services.
+librepods` de home.nix) porque el gap es de NixOS en general, no de
+LibrePods -- cualquier otra app que use libxkbcommon para compose puede
+pegar contra lo mismo.
+
+**Corrección sobre lo anterior, tras el primer reinicio real (2026-08-10,
+mismo día):** el `environment.sessionVariables.XLOCALEDIR` global NO alcanzó
+-- LibrePods volvió a crashear al arrancar, esta vez agotando los 5
+reintentos por defecto de systemd (`start-limit-hit`) y quedando caído del
+todo, sin auto-recovery. Confirmado con `systemctl --user show-environment`
+que `XLOCALEDIR` SÍ terminaba en el entorno del manager de usuario, pero
+tarde: niri-session recién corre `dbus-update-activation-environment --all`
+al arrancar niri, y `librepods.service` (`WantedBy=graphical-session.target`)
+arranca en esa misma ventana -- carrera real, ganada por LibrePods en este
+boot. `systemctl --user reset-failed librepods && systemctl --user start
+librepods` lo recuperó a mano al instante (confirma el diagnóstico: con el
+entorno ya propagado, arranca sin problema). Fix real: declarar
+`Environment = "XLOCALEDIR=..."` directo en `systemd.user.services.
+librepods.Service` (home.nix) además del global -- así no depende en
+absoluto del timing de propagación del entorno de sesión.
+
+### Verificación del tema dinámico (matugen) en todas las apps, y un gap real de KDE (2026-08-10)
+
+A pedido explícito, se verificó en vivo que el tema activo de DMS (en este
+momento: theme "custom" `gruvboxMulti`, flavor `classic-hard-dark`, accent
+`green` -- ver `~/.config/DankMaterialShell/settings.json`) se propaga
+correctamente a todo lo que depende de matugen:
+
+- **kitty**: `~/.config/kitty/dank-theme.conf`/`dank-tabs.conf` con mtime
+  fresco, `kitty.conf` los incluye (arreglado en la Fase 3) -- confirmado
+  visualmente en esta misma terminal, colores correctos.
+- **GTK 3/4** (Nautilus, Loupe, diálogos GTK en general):
+  `~/.config/gtk-{3,4}.0/dank-colors.css` con mtime fresco y valores
+  correctos (`accent_bg_color #b8bb26`, verde, matchea el accent activo);
+  `gtk.css` los importa (arreglado en la Fase 3). Confirmado visualmente
+  abriendo Nautilus.
+- **KDE/Qt (Kleopatra, pinentry-qt)** -- ACÁ SÍ había un gap real, no
+  arreglado en la Fase 3 pese a estar documentado como pendiente: DMS
+  genera `~/.local/share/color-schemes/DankMatugenDark.colors` perfecto y
+  al día (`matugenTemplateKcolorscheme: true` en settings.json), pero
+  nunca lo aplicaba a `~/.config/kdeglobals` -- confirmado leyendo
+  `core/internal/matugen/matugen.go` del flake de DMS:
+  `applyKDEColorScheme()` llama a `plasma-apply-colorscheme`, y ese binario
+  NO está instalado acá (viene de `plasma-workspace`, que no se instaló --
+  solo se agregaron `kdePackages.breeze`/`plasma-integration`, ver
+  modules/desktop.nix). Sin ese paso, `kdeglobals` seguía con
+  `ColorScheme=Noctalia` y colores mezclados/viejos (algunos coincidían por
+  casualidad, la mayoría no). Arreglado a mano por esta vez: un script awk
+  (`/tmp/.../apply-kde-colorscheme.awk`, no versionado, es un fix puntual
+  de runtime) copió las secciones `[Colors:*]`/`[ColorEffects:*]`/`[WM]` y
+  el `[General] ColorScheme=/Name=` de `DankMatugenDark.colors` a
+  `kdeglobals`, dejando intactas `[KDE]` (ya coincidía) y `[KFileDialog
+  Settings]` (estado propio de Kleopatra, sin relación con el tema).
+  Confirmado visualmente abriendo Kleopatra.
+  **Limitación que queda:** sin `plasma-apply-colorscheme`, este paso NO se
+  reaplica solo la próxima vez que cambies el tema/wallpaper desde la UI de
+  DMS -- kdeglobals va a volver a quedarse desactualizado. Si eso molesta,
+  la opción real es instalar `kdePackages.plasma-workspace` (pesado, trae
+  todo Plasma) o repetir este merge a mano. No se automatizó porque son
+  solo dos apps QT en todo el setup (Kleopatra y pinentry-qt) -- bajo
+  impacto para el peso que tendría la alternativa.
+- **niri**: sin border/focus-ring (`off` explícito en niri.kdl, pedido
+  original), así que el template `niri-colors.kdl` que trae DMS (colores de
+  borde) no aplica acá -- nada que verificar.
+- **DMS mismo** (bar, dock, control center, etc.): refleja el tema por
+  definición, es su propia UI nativa -- confirmado en cualquiera de las
+  capturas de esta ronda (barra superior).
+
+### Bug real encontrado de paso: cambiar el wallpaper desde la UI de DMS no se veía en el escritorio (2026-08-10)
+
+Durante la verificación de arriba, reporte del usuario: cambiar el wallpaper
+desde la UI de DMS no se reflejaba en el escritorio normal, solo se veía en
+el Overview (Mod+O). Causa: `swaybg` (el workaround del wallpaper gris, ver
+la entrada de Fase 1) lee la ruta del wallpaper UNA sola vez al arrancar
+niri -- confirmado con `dms ipc call wallpaper set <ruta>` que
+`session.json` se actualiza al instante, pero el `swaybg` ya corriendo se
+queda con la ruta vieja. El Overview no tiene este problema porque ahí se
+ve la superficie real de DMS (que sí es dinámica), no la de swaybg.
+
+**Fix:** `dms-wallpaper-watch`, script nuevo en `modules/niri.nix`
+(paquete vía `pkgs.writeShellScriptBin`), spawneado desde `niri.kdl` en vez
+del `spawn-sh-at-startup` de una sola vez. Vigila `session.json` con
+`inotifywait` y relanza `swaybg` con la ruta nueva cada vez que cambia.
+Tres problemas reales encontrados y corregidos en el camino, los tres
+solo visibles probando en vivo (no se habrían visto por inspección de
+código):
+
+1. **Vigilar el archivo directo no funciona.** `inotifywait -e close_write
+   -e moved_to session.json` nunca disparaba ni un solo evento pese a que
+   el archivo sí cambiaba (confirmado con `jq` que el contenido nuevo
+   estaba ahí). Causa: DMS escribe con el patrón atómico temp-file+rename
+   (`CREATE session.json.XXXXXX` seguido de `MOVED_TO session.json`,
+   confirmado con `inotifywait -m` sobre el directorio) -- un watch sobre
+   la ruta del archivo queda atado al inode viejo, que el rename deja
+   huérfano, y nunca vuelve a disparar. Fix: vigilar el DIRECTORIO
+   (`~/.local/state/DankMaterialShell/`), no el archivo.
+2. **El filtro `--include` con regex anclado y escapado
+   (`'^session\.json$'`) no matcheaba nunca** con esta versión de
+   inotify-tools (4.25.9.0) -- confirmado en vivo, timeout total sin
+   disparar pese a cambios reales de por medio. Un patrón simple sin
+   anclas (`'session.json'`) sí funciona. No se investigó la causa exacta
+   del regex anclado (poco importa: no hay otro archivo con ese nombre en
+   el directorio, así que el patrón simple es suficiente y más robusto).
+3. **`pkill -x swaybg` nunca mataba el proceso viejo** -- confirmado con
+   `cat /proc/<pid>/comm`: el binario real de `pkgs.swaybg` corre como
+   `.swaybg-wrapped` (nombre del wrapper que arma Nix), no como `swaybg` a
+   secas, así que un match exacto por nombre nunca pegaba. Sin esto, cada
+   cambio de wallpaper ACUMULABA una instancia nueva de swaybg en vez de
+   reemplazar la anterior (varias corriendo a la vez, compitiendo por la
+   superficie). Fix: guardar el PID real del `swaybg &` lanzado (`$!`) y
+   matar por PID, sin depender del nombre de proceso en absoluto.
+
+Probado en vivo con `dms ipc call wallpaper set <ruta>` en varias vueltas
+seguidas, confirmando cada vez con `pgrep -a swaybg` que queda UNA sola
+instancia con la ruta correcta y la vieja realmente terminada (`ps -p
+<pid-viejo>` sin resultados).

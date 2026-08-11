@@ -1,5 +1,5 @@
 {
-  description = "Configuración NixOS de ale — Hyprland + Noctalia";
+  description = "Configuración NixOS de ale — niri + DankMaterialShell";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -9,24 +9,24 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    noctalia = {
-      url = "github:noctalia-dev/noctalia";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    noctalia-greeter = {
-      url = "github:noctalia-dev/noctalia-greeter";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # niri + DankMaterialShell (migración en curso, ver NOTES.md/plan) --
-    # conviven con Hyprland+Noctalia como segunda sesión mientras se prueba.
     # Solo se usan los módulos NixOS/home-manager del propio flake
     # (programs.dank-material-shell.*), NO su módulo `niri` (distro/nix/niri.nix
     # exige sodiboo/niri-flake, que no se agrega -- el config.kdl se escribe a
     # mano contra el módulo `programs.niri` que ya trae nixpkgs).
+    #
+    # Pineado al tag v1.5.3 (la MISMA versión que usa pkgs.dms-shell de
+    # nixpkgs) a propósito, NO la rama main -- diagnosticado en vivo
+    # (2026-08-10, ver NOTES.md, Fase 3): sin pin, este input flotaba en un
+    # commit de main post-1.5.3 ("1.6-beta") que ya había reestructurado
+    # Modules/Greetd/ (movido a Modals/Greeter/, sin el launcher
+    # Modules/Greetd/assets/dms-greeter). services.displayManager.dms-greeter
+    # (nixos/modules/services/display-managers/dms-greeter.nix de nixpkgs)
+    # tiene esa ruta hardcodeada -- greetd fallaba al arrancar la sesión
+    # ("No existe el fichero o el directorio") en cuanto se reinició con
+    # dms-greeter activo. v1.5.3 es además el último tag publicado (no hay
+    # v1.6 todavía, confirmado con `git ls-remote --tags`).
     dank-material-shell = {
-      url = "github:AvengeMedia/DankMaterialShell";
+      url = "github:AvengeMedia/DankMaterialShell/v1.5.3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -79,8 +79,6 @@
     { self
     , nixpkgs
     , home-manager
-    , noctalia
-    , noctalia-greeter
     , dank-material-shell
     , dankcalendar
     , zen-browser
@@ -98,14 +96,7 @@
         inherit system;
         specialArgs = { inherit inputs; };
         modules = [
-          # nixpkgs subió su propio módulo `programs.noctalia` (2026-07-29,
-          # nixos/modules/programs/wayland/noctalia.nix) que choca con el
-          # módulo del input noctalia (misma opción declarada dos veces).
-          # Usamos el del input, que sigue el upstream de noctalia-dev.
-          { disabledModules = [ "programs/wayland/noctalia.nix" ]; }
           ./hosts/ale/configuration.nix
-          noctalia.nixosModules.default
-          noctalia-greeter.nixosModules.default
           dank-material-shell.nixosModules.default
           home-manager.nixosModules.home-manager
           {

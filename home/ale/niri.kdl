@@ -99,14 +99,15 @@ layer-rule {
 // relanzarlo a mano). Ver el comentario largo en modules/niri.nix.
 
 // --- swaybg: workaround del wallpaper gris (bug real de DMS, ver arriba y
-// modules/niri.nix) --- lee la ruta actual directo del session.json de DMS
-// (no hardcodeada) para no competir con el wallpaper picker de DMS -- si
-// cambiás el wallpaper desde la UI de DMS, hace falta reiniciar niri (o
-// relanzar el spawn a mano) para que swaybg tome la nueva ruta. Probado en
-// vivo el 2026-08-08: la superficie de swaybg gana el z-order sobre la
-// (rota) de DMS en la misma capa Background y sí se ve. Sacar el día que se
-// confirme arreglado upstream.
-spawn-sh-at-startup "swaybg -o eDP-1 -i \"$(jq -r .wallpaperPath ~/.local/state/DankMaterialShell/session.json)\" -m fill"
+// modules/niri.nix) --- dms-wallpaper-watch (paquete definido en
+// modules/niri.nix) vigila el session.json de DMS con inotify y relanza
+// swaybg con la ruta nueva cada vez que cambiás el wallpaper desde la UI de
+// DMS -- antes era un spawn-sh-at-startup de una sola vez y quedaba
+// desactualizado hasta reiniciar niri (diagnosticado en vivo, 2026-08-10).
+// Probado en vivo el 2026-08-08 que la superficie de swaybg gana el z-order
+// sobre la (rota) de DMS en la misma capa Background y sí se ve. Sacar el
+// día que se confirme arreglado upstream (AvengeMedia/DankMaterialShell#2299).
+spawn-at-startup "dms-wallpaper-watch"
 
 // --- Window rules: floating ---
 // niri ya auto-flota una ventana nueva si tiene parent toplevel (la mayoría

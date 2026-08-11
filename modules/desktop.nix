@@ -1,26 +1,14 @@
 { config, lib, pkgs, inputs, ... }:
 
 {
-  # --- Hyprland ---
-  # El módulo de NixOS ya habilita polkit, xdg-desktop-portal-hyprland, dconf,
-  # xwayland y añade la entrada de sesión al display manager — no hace falta
-  # configurar eso a mano.
-  programs.hyprland.enable = true;
-
   # pkexec necesita el wrapper setuid de NixOS para funcionar (el binario
-  # crudo del store no tiene setuid). Sin esto:
-  #   - el propio módulo de gamemode (modules/graphics.nix) apunta su
-  #     servicio systemd a "${security.wrapperDir}/pkexec", que no existiría
-  #     -> las operaciones privilegiadas de gamemode (cpugovctl/gpuclockctl)
-  #     fallarían.
-  #   - la función "Sync Now" de noctalia-greeter (sincroniza tema/wallpaper
-  #     del greeter con el shell) también depende de pkexec en PATH y
-  #     funcional -- es un problema documentado ("Sync fails with no
-  #     privilege escalator") cuando pkexec está deshabilitado en NixOS.
+  # crudo del store no tiene setuid). Sin esto, el propio módulo de gamemode
+  # (modules/graphics.nix) apunta su servicio systemd a
+  # "${security.wrapperDir}/pkexec", que no existiría -> las operaciones
+  # privilegiadas de gamemode (cpugovctl/gpuclockctl) fallarían.
   security.polkit.enablePkexecWrapper = true;
 
-  # --- Requisitos de Noctalia (docs.noctalia.dev/v5/getting-started/nixos) ---
-  networking.networkmanager.enable = true;
+  networking.networkmanager.enable = true; # applet de red de DMS habla con NetworkManager por D-Bus
   hardware.bluetooth.enable = true;
 
   # El control de Xbox Wireless Controller (045e:0b13, firmware 5.09) empareja
@@ -79,7 +67,7 @@
     options btusb enable_autosuspend=0
   '';
 
-  # --- Audio (pipewire) — necesario para que los atajos wpctl del hyprland.lua funcionen ---
+  # --- Audio (pipewire) — necesario para los atajos de volumen (dms ipc audio, en niri.kdl) ---
   security.rtkit.enable = true;
   services.pulseaudio.enable = false; # renombrado desde hardware.pulseaudio (confirmado con nix eval real)
   services.pipewire = {
@@ -135,57 +123,46 @@
   # ser que ninguno de los dos aguante sostenido en este adaptador. Si tras
   # probar aac un buen rato tampoco aguanta, hay que investigar otra causa
   # (térmica/firmware) en vez de seguir cambiando códecs.
+  #
+  # "sbc" sacado de la lista (2026-08-10): forzando aac a mano andaba bien,
+  # pero al reproducir música con pysonic PipeWire renegociaba a sbc de
+  # nuevo. `bluez5.codecs` no es una preferencia, es la lista de códecs
+  # ofrecidos en la negociación -- sacando "sbc" del todo, PipeWire no
+  # puede caer a él sin importar qué pida la app.
   services.pipewire.wireplumber.extraConfig."51-bluez-avrcp" = {
     "monitor.bluez.properties" = {
       "bluez5.dummy-avrcp-player" = true;
-      "bluez5.codecs" = [ "sbc" "aac" ];
+      "bluez5.codecs" = [ "aac" ];
     };
   };
 
-  # --- Noctalia shell (módulo NixOS, instala el paquete a nivel de sistema) ---
-  programs.noctalia = {
-    enable = true;
-    recommendedServices.enable = true;
-    # El cherry-pick del fix de password de CalDAV (pkgs/noctalia-patched.nix)
-    # ya fue mergeado en upstream desde noctalia 5.0.0 (2026-07-26, ver
-    # NOTES.md) -- el paquete default del flake ya trae el fix, sin override.
-  };
-
-  # Noctalia guarda credenciales durables (password de cuentas CalDAV,
-  # tokens de Google Calendar, la master key del cache cifrado) a través de
-  # libsecret (src/security/secret_store.cpp del propio noctalia -- única
-  # implementación de SecretStoreBackend es LibsecretBackend, que llama
-  # secret_service_get_sync() contra org.freedesktop.secrets por D-Bus). Sin
-  # ESTO no hay ningún proveedor de Secret Service corriendo en el sistema
-  # -- confirmado en ~/.cache/noctalia/noctalia.log:
-  # "[secret-store] ... status=unavailable category=provider-unavailable" y
-  # "[calendar] calendar credential migration is pending" repitiéndose sin
-  # parar -- así que la cuenta CalDAV de Nextcloud (agregada en
-  # [calendar.account.home_nextcloud] de settings.toml, server/usuario
-  # correctos) nunca llega a autenticarse y el calendario queda vacío.
-  # gnome-keyring implementa ese Secret Service -- no hace falta estar en
-  # GNOME para usarlo, es el backend estándar también en setups
-  # Hyprland/wlroots. El módulo de greetd de nixpkgs
-  # (nixos/modules/services/display-managers/greetd.nix) ya conecta
-  # `security.pam.services.greetd.enableGnomeKeyring` a este mismo booleano
-  # por default (`lib.mkDefault config.services.gnome.gnome-keyring.enable`)
-  # -- y noctalia-greeter (nix/nixos-module.nix del input) configura
-  # `services.greetd` por debajo -- así que con esta única línea el keyring
-  # queda auto-unlockeado con el password de login, sin tocar PAM a mano.
+  # gnome-keyring implementa el Secret Service (org.freedesktop.secrets) que
+  # tanto DankCalendar (dcal, credenciales CalDAV -- ver core/cmd/dcal/
+  # keyring_migrate.go del propio proyecto) como Chromium Safe Storage
+  # necesitan por D-Bus. programs.niri.enable (modules/niri.nix) ya deja esto
+  # en `lib.mkDefault true` -- se declara acá explícito de todas formas
+  # porque el módulo de greetd (nixos/modules/services/display-managers/
+  # greetd.nix) conecta `security.pam.services.greetd.enableGnomeKeyring` a
+  # este mismo booleano por default, y así queda documentado en un solo
+  # lugar el motivo real (auto-unlock del keyring con el password de login,
+  # sin tocar PAM a mano).
   services.gnome.gnome-keyring.enable = true;
 
-  # --- Noctalia Greeter ---
-  # Greeter oficial hecho para Noctalia: usa greetd + un compositor wlroots
-  # propio y comparte el mismo lenguaje visual (tema/colores/wallpaper) que
-  # el shell. Es el que mejor encaja con Noctalia (en vez de SDDM/tuigreet).
-  programs.noctalia-greeter = {
+  # --- DankMaterialShell Greeter ---
+  # package/quickshell.package pineados EXPLÍCITAMENTE al paquete del flake
+  # de DMS (inputs.dank-material-shell, ver flake.nix) -- el default del
+  # módulo cae a `programs.dms-shell` (el paquete de NIXPKGS, no usado en
+  # este repo, ver modules/niri.nix) si no se fija así, lo que produciría
+  # skew de versión entre el DMS real (sesión) y el que corre en el greeter.
+  # configHome: copia settings.json/session.json/dms-colors.json del usuario
+  # al greeter -- mismo wallpaper/tema (matugen) que en la sesión real, en
+  # vez de la UI default sin personalizar.
+  services.displayManager.dms-greeter = {
     enable = true;
-    # "hyprland" matchea case-insensitive contra el campo Name= del .desktop
-    # de sesión (no el nombre de archivo) -- rastreado hasta
-    # greeter_sessions.cpp de noctalia-greeter (discoverSessions +
-    # equalsIgnoreCase) y hasta example/hyprland.desktop.in del propio
-    # Hyprland (Name=Hyprland). Confirmado, no es una suposición.
-    greeter-args = "--session hyprland";
+    package = config.programs.dank-material-shell.package;
+    quickshell.package = config.programs.dank-material-shell.quickshell.package;
+    compositor.name = "niri";
+    configHome = "/home/ale";
   };
 
   fonts.packages = with pkgs; [
@@ -197,23 +174,27 @@
   environment.systemPackages = with pkgs; [
     kdePackages.kleopatra
     inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
-    kitty          # terminal usada en hyprland.lua (mainMod+Return)
-    brightnessctl  # atajos de brillo en hyprland.lua
-    nautilus       # gestor de archivos GTK4 -- hereda el theme de Noctalia solo
-                   # (template built-in "gtk4"), sin necesidad de config aparte
-    yazi           # gestor de archivos TUI -- único con template oficial de
-                   # color de Noctalia (community_ids en home.nix)
-    python3        # requerido por el template "kcolorscheme" de Noctalia
-                   # (assets/templates/kde/apply.py escribe ~/.config/kdeglobals
-                   # para que Kleopatra herede el color) -- sin esto el script
-                   # falla en silencio y Kleopatra se queda con el tema por defecto.
+    kitty          # terminal (Mod+Return en niri.kdl)
+    brightnessctl  # atajos de brillo (XF86MonBrightness* en niri.kdl, vía dms ipc brightness)
+    nautilus       # gestor de archivos GTK4 -- hereda el theme (matugen) de DMS solo
+                   # (escribe gtk-4.0/gtk.css directo, confirmado en core/internal/
+                   # matugen/matugen.go), sin necesidad de config aparte
+    yazi           # gestor de archivos TUI. DMS no trae template propio para yazi
+                   # (a diferencia de Noctalia, que sí lo tenía vía community_ids) --
+                   # queda sin tema Gruvbox automático hasta que exista un template.
     kdePackages.breeze              # estilo Qt que renderiza la paleta de KDE
     kdePackages.plasma-integration  # plugin de QPA platform theme (KDEPlasmaPlatformTheme6.so)
                                     # que aplica kdeglobals a cualquier app Qt -- sin esto
-                                    # kdeglobals ya tenía los colores de Noctalia correctos
-                                    # (confirmado con un cat real) pero nada los usaba: ni
-                                    # Kleopatra ni pinentry-qt (el diálogo de PIN de la
-                                    # YubiKey) los mostraban.
+                                    # Kleopatra y pinentry-qt (el diálogo de PIN de la
+                                    # YubiKey) no muestran los colores aunque kdeglobals
+                                    # ya los tenga. DMS también escribe su propio template
+                                    # kcolorscheme (matugen/configs/kcolorscheme.toml del
+                                    # flake) -- sin python de por medio (a diferencia de
+                                    # Noctalia) -- pero solo lo APLICA si ya elegiste
+                                    # "DankMatugen" como color scheme de KDE una vez (ver
+                                    # matugen.go:isDMSKDEColorSchemeActive); hacelo desde
+                                    # Configuración del sistema o `dms ipc theme apply` si
+                                    # Kleopatra/pinentry no toman el color.
     inputs.psysonic.packages.${pkgs.stdenv.hostPlatform.system}.default
       # cliente de música self-hosted (Navidrome), reemplaza a feishin --
       # empaquetado vía su propio flake.nix (no está en nixpkgs). Hace
@@ -259,19 +240,31 @@
          # filtros raros irrelevantes para reproducir, no decoders extra.
 
     loupe  # visor de imágenes -- GTK4/libadwaita (mismo stack que Nautilus,
-           # ya instalado), así que hereda el theme Gruvbox/Noctalia solo vía
-           # el template built-in "gtk4" (igual que Nautilus, ver comentario
-           # de arriba) sin declarar nada extra. El propio README de Noctalia
-           # no recomienda ningún visor de imágenes en particular (fuera de
-           # su alcance, mismo caso que el gestor de archivos) -- elegido por
-           # consistencia con el resto del setup GTK4 en vez de alternativas
-           # nativas de Wayland (swayimg/imv), que no traen esa integración
-           # automática de tema y requerirían configurarla a mano.
+           # ya instalado), así que hereda el theme (matugen/DMS) solo, sin
+           # declarar nada extra -- elegido por consistencia con el resto del
+           # setup GTK4 en vez de alternativas nativas de Wayland (swayimg/
+           # imv), que no traen esa integración automática de tema y
+           # requerirían configurarla a mano.
   ];
 
   # Necesario para que QT_QPA_PLATFORMTHEME=kde (de abajo) resuelva al plugin
   # de plasma-integration en vez de caer al tema Qt genérico sin colores.
   environment.sessionVariables.QT_QPA_PLATFORMTHEME = "kde";
+
+  # XLOCALEDIR: sin esto, libxkbcommon busca los archivos Compose (dead
+  # keys/secuencias de teclado, ej. lo que usa altgr-intl en niri.kdl) en el
+  # path FHS clásico "/usr/share/X11/locale", que en NixOS no existe --
+  # xkb_compose_table_new_from_locale() falla la búsqueda para es_MX.UTF-8 y
+  # cualquier app que no maneje ese error a propósito se cae. Diagnosticado
+  # en vivo (2026-08-10): LibrePods (usa winit para su ventana/tray) crasheaba
+  # con SIGABRT en el arranque (panic en winit::...::xkb::Context::new,
+  # backtrace real vía `coredumpctl info`) hasta que reintentaba lo
+  # suficiente como para que la condición de carrera no se diera. Confirmado
+  # el fix en vivo corriendo el binario a mano con esta variable puesta --
+  # deja de crashear. Se pone acá (global) y no solo en el servicio de
+  # LibrePods porque cualquier otra app Rust/GTK que use libxkbcommon para
+  # compose puede pegar contra el mismo gap.
+  environment.sessionVariables.XLOCALEDIR = "${pkgs.libx11}/share/X11/locale";
 
   # Sin esto, Nautilus no tiene papelera, ni monta MTP/almacenamiento
   # removible/shares de red -- confirmado que services.gvfs.enable es un

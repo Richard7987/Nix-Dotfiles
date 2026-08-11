@@ -1,8 +1,13 @@
 { config, pkgs, lib, inputs, ... }:
 
+let
+  # Compartido entre home.packages (PATH, para abrir la UI a mano) y el
+  # systemd.user.service de más abajo (autostart en segundo plano) -- un solo
+  # callPackage evita declarar la misma derivación dos veces.
+  librepodsPkg = pkgs.callPackage ../../pkgs/librepods.nix { };
+in
 {
   imports = [
-    inputs.noctalia.homeModules.default
     inputs.dank-material-shell.homeModules.default
     inputs.dankcalendar.homeModules.default
   ];
@@ -47,17 +52,15 @@
   };
 
   # --- Cursor ---
-  # Sin esto, Hyprland cae a su cursor propio por defecto (el logo de
-  # Hyprland) -- no hay ningún theme de cursor instalado/declarado.
-  # hyprcursor.enable = true exporta HYPRCURSOR_THEME/HYPRCURSOR_SIZE (única
-  # forma de que Hyprland use un theme real en vez de su fallback, confirmado
-  # contra el módulo real home-manager, modules/config/home-cursor.nix).
   # gtk.enable = true de paso para que Nautilus/Kleopatra/etc. usen el mismo
   # cursor. "Bibata-Modern-Amber" -- tonos cálidos, combina con Gruvbox.
   # Necesario para que pointerCursor.gtk.enable de abajo aplique de verdad --
   # confirmado que solo gestiona gtk-3.0/settings.ini (cursor-theme-name),
   # NO gtk.css (eso solo pasa si se setea gtk.gtk3.extraCss, que no hacemos)
-  # -- no choca con el gtk.css que Noctalia ya escribe en runtime.
+  # -- no choca con el gtk.css que DMS ya escribe en runtime.
+  # Sin hyprcursor.enable (era solo para Hyprland) -- niri no lee hyprcursor,
+  # usa XCURSOR_THEME/XCURSOR_SIZE estándar, que gtk.enable/pointerCursor.gtk
+  # ya exportan, más el bloque `cursor {}` de niri.kdl como refuerzo.
   gtk.enable = true;
 
   home.pointerCursor = {
@@ -66,144 +69,35 @@
     name = "Bibata-Modern-Amber";
     size = 24;
     gtk.enable = true;
-    hyprcursor.enable = true;
   };
 
-  # --- Noctalia: ajustes declarativos vía Nix en vez de TOML a mano ---
-  # systemd.enable = false (default) a propósito: Noctalia ya se lanza desde
-  # el hook hl.on("hyprland.start", ...) en hyprland.lua -- que es el método
-  # que la propia doc de Noctalia documenta para Hyprland. Si además
-  # activáramos el servicio systemd (ligado a wayland.systemd.target =
-  # "graphical-session.target" por defecto), correríamos el riesgo de que
-  # ambos mecanismos lancen Noctalia a la vez -> dos instancias peleando por
-  # la barra/IPC. Usa solo uno; el de hyprland.lua es el que no depende de
-  # que graphical-session.target se active correctamente.
   # Paquete Nix real de wallpapers (github:AngelJumbo/gruvbox-wallpapers,
   # categoría "default" = las 554 imágenes de todas las categorías, ~1.4GB) --
-  # instalado declarativamente vía home.file en vez de bajarlos a mano.
-  # recursive = true: symlinkea archivo por archivo (no la carpeta entera
-  # como una unidad), tal cual lo documenta el propio README del repo.
+  # instalado declarativamente vía home.file en vez de bajarlos a mano. DMS
+  # elige el wallpaper activo desde acá vía su propio picker (dinámico, ver
+  # comentario de programs.dank-material-shell más abajo). recursive = true:
+  # symlinkea archivo por archivo (no la carpeta entera como una unidad),
+  # tal cual lo documenta el propio README del repo.
   home.file."Pictures/Wallpapers/gruvbox" = {
     source = inputs.gruvbox-wallpapers.packages.${pkgs.stdenv.hostPlatform.system}.default;
     recursive = true;
   };
 
-  programs.noctalia = {
-    enable = true;
-    # El cherry-pick del fix de password de CalDAV (pkgs/noctalia-patched.nix)
-    # ya fue mergeado en upstream desde noctalia 5.0.0 (2026-07-26, ver
-    # NOTES.md) -- el paquete default del flake ya trae el fix, sin override.
-    settings = {
-      theme = {
-        mode = "dark";
-        source = "builtin";
-        builtin = "Gruvbox";
-        # "yazi" es el único gestor de archivos con template oficial de color
-        # de Noctalia (confirmado con `noctalia theme --list-templates` --
-        # está en community templates, no built-in). builtin_ids (gtk3/gtk4/
-        # hyprland/kitty/btop) ya vienen activos por default, no hace falta
-        # declararlos.
-        templates.community_ids = [ "yazi" ];
-      };
-      wallpaper.directory = "${config.home.homeDirectory}/Pictures/Wallpapers/gruvbox";
-
-      # --- Plugin screen_recorder: capturar por monitor en vez de portal ---
-      # Con el default (video_source = "portal") gpu-screen-recorder falla en
-      # este equipo: "Recording failed" en pantalla, y en
-      # ~/.cache/noctalia/noctalia.log aparece
-      # "gsr_pipewire_video_create_egl_image_with_fallback: failed to create
-      # egl image with modifier ..." seguido de "no more input formats" y
-      # timeout de negociación PipeWire -- problema conocido de
-      # gpu-screen-recorder + portal en Nvidia propietario (PRIME sync,
-      # ver modules/graphics.nix). "focused" pasa -w <monitor> en vez de
-      # -w portal, capturando el output directo vía wlroots sin depender del
-      # portal/PipeWire (confirmado en recorder_service.luau del plugin).
-      plugin_settings."noctalia/screen_recorder".video_source = "focused";
-      # Sin esto NO hay ningún agente de polkit corriendo (Hyprland/gamemode
-      # solo activan el daemon de polkit, no un agente gráfico) -- acciones
-      # con privilegios de apps GUI (ej. NetworkManager guardando una
-      # contraseña wifi) fallarían en silencio sin diálogo que las autorice.
-      # Noctalia trae su propio agente (src/shell/polkit/), pero viene
-      # apagado por defecto (polkit_agent = false en example.toml).
-      shell.polkit_agent = true;
-      # shell.lang: sin setear a propósito. i18n_service.cpp cae a
-      # $LANG/$LC_ALL/$LC_MESSAGES si no hay preferencia explícita, y ya
-      # tenemos i18n.defaultLocale = "es_MX.UTF-8" a nivel de sistema
-      # (hosts/ale/configuration.nix) -- confirmado que existe catálogo
-      # es.json en assets/translations/, así que la UI sale en español sola.
-
-      # --- Idle: bloqueo/apagado de pantalla/suspensión por inactividad ---
-      # CORRECCIÓN: la ronda anterior agregó services.hypridle (systemd,
-      # externo) asumiendo que Noctalia no tenía nada propio. Falso --
-      # Noctalia trae su propio IdleManager nativo (src/idle/, sobre
-      # ext-idle-notify-v1, confirmado leyendo el fuente real de
-      # noctalia-shell 5.0.0) con exactamente este mismo propósito, vía
-      # [idle.behavior.*] en TOML (action = lock|screen_off|suspend|
-      # lock_and_suspend|command, ver example.toml del paquete). Usar el
-      # externo duplicaba el trabajo Y competía por la interfaz DBus
-      # org.freedesktop.ScreenSaver que Noctalia ya registra (confirmado en
-      # vivo: "[ERR] Another service is already providing the
-      # org.freedesktop.ScreenSaver interface" en el log de hypridle) --
-      # ver NOTES.md. Se saca hypridle (y su arranque en hyprland.lua) y se
-      # usa esto en su lugar: mismos timeouts, sin segundo daemon.
-      idle = {
-        behavior = {
-          lock = {
-            timeout = 300; # 5 min sin actividad -> bloquear
-            action = "lock";
-            enabled = true;
-          };
-          "screen-off" = {
-            timeout = 330; # ~30s después del lock -> apagar pantalla (batería del laptop)
-            action = "screen_off";
-            enabled = true;
-          };
-          suspend = {
-            timeout = 900; # 15 min sin actividad -> suspender
-            action = "suspend"; # lock_before_suspend default = true, ya bloquea antes de suspender
-            enabled = true;
-          };
-        };
-      };
-
-      # --- Screenshots ---
-      # No hacía falta agregar grim/slurp: Noctalia trae su propio
-      # ScreenshotService nativo (src/capture/, IPC "screenshot-region" /
-      # "screenshot-fullscreen", confirmado en el fuente). Los defaults de
-      # ScreenshotConfig ya sirven (saveToFile=true a ~/Pictures,
-      # copyToClipboard=true, freezeScreen=true), así que no se pisa nada
-      # acá -- solo faltan los binds, agregados en hyprland.lua.
-
-      # --- Clipboard ---
-      # Tampoco hacía falta cliphist: shell.clipboard_enabled ya es true por
-      # default (historial + panel "clipboard" nativos, confirmado en
-      # config_types.h). Solo faltaba el bind para abrir el panel, agregado
-      # en hyprland.lua (mainMod+P).
-    };
-  };
-
-  # --- Hyprland: config en Lua (ver home/ale/hyprland.lua) ---
-  xdg.configFile."hypr/hyprland.lua".source = ./hyprland.lua;
-
-  # --- niri + DankMaterialShell: migración en curso, conviven con Hyprland+Noctalia ---
+  # --- DankMaterialShell (niri) ---
   # systemd.enable = false ACÁ a propósito: el servicio systemd real
   # (Restart=on-failure) ya lo crea el módulo NixOS en modules/niri.nix
   # (programs.dank-material-shell.systemd.enable = true ahí) -- si este
   # módulo home-manager TAMBIÉN lo creara, quedarían dos unidades "dms"
   # distintas (una por /etc/systemd/user/, otra por ~/.config/systemd/user/)
-  # peleando por el mismo bus. Confirmado en vivo (2026-08-08, ver NOTES.md)
-  # que hace falta supervisión systemd real: un spawn-at-startup sin
-  # supervisor no se relanza solo si el proceso muere.
+  # peleando por el mismo bus.
   #
   # settings/session sin declarar A PROPÓSITO: el tema queda 100% dinámico
   # (matugen deriva colores de lo que elijas en vivo desde la propia UI de DMS,
   # wallpaper picker incluido) en vez de fijarlo desde Nix -- pedido explícito.
   # Fijar acá `session.wallpaperPath` reafirmaría el mismo wallpaper en cada
-  # rebuild y pisaría cualquier cambio hecho desde la UI, el mismo problema que
-  # ya pasa con Noctalia (su settings.toml en runtime le gana al config.toml
-  # estático de Nix, ver NOTES.md) -- se elige explícitamente NO repetirlo acá.
-  # Todo lo que NO es tema (binds, window rules, arranque) sí queda declarado
-  # en niri.kdl / modules/niri.nix.
+  # rebuild y pisaría cualquier cambio hecho desde la UI en runtime -- se
+  # elige explícitamente NO hacerlo. Todo lo que NO es tema (binds, window
+  # rules, arranque) sí queda declarado en niri.kdl / modules/niri.nix.
   programs.dank-material-shell = {
     enable = true;
     systemd.enable = false;
@@ -245,12 +139,7 @@
   #   voxtype setup --download --model <nombre>
   services.voxtype.enable = true;
 
-  # mkOutOfStoreSymlink en vez de source normal MIENTRAS se afina la config a
-  # ojo (niri recarga en caliente al guardar) -- volver a `source = ./niri.kdl`
-  # cuando quede estable, para que sea de nuevo un symlink de solo lectura al
-  # store como el resto de los xdg.configFile de este repo.
-  xdg.configFile."niri/config.kdl".source =
-    config.lib.file.mkOutOfStoreSymlink "/nixdots/home/ale/niri.kdl";
+  xdg.configFile."niri/config.kdl".source = ./niri.kdl;
 
   # --- GPG / YubiKey ---
   # Opciones verificadas contra el módulo real de home-manager
@@ -273,7 +162,7 @@
     enableZshIntegration = true; # exporta GPG_TTY y corre `updatestartuptty` solo (igual que tu .zshrc en FreeBSD)
     defaultCacheTtl = 600;
     maxCacheTtl = 7200;
-    pinentry.package = pkgs.pinentry-qt; # funciona bien en Wayland/Hyprland (a diferencia de pinentry-gtk2 en X11)
+    pinentry.package = pkgs.pinentry-qt; # funciona bien en Wayland (a diferencia de pinentry-gtk2 en X11)
   };
 
   # --- ssh: IdentityAgent explícito (bug real de IDEA, 2026-07-28) ---
@@ -453,9 +342,9 @@
       # Sin argumentos actualiza TODOS los inputs a la vez (comportamiento
       # de siempre). Pasándole nombres de inputs (ej. `nixos-update nixpkgs`)
       # actualiza solo esos -- útil para no mover inputs que no hacía falta
-      # tocar y así no perder el cache-hit de noctalia.cachix.org /
-      # psysonic.cachix.org en builds que de otra forma no habrían cambiado
-      # (ver auditoría 2026-07-26 en NOTES.md).
+      # tocar y así no perder el cache-hit de psysonic.cachix.org en builds
+      # que de otra forma no habrían cambiado (ver auditoría 2026-07-26 en
+      # NOTES.md).
       nixos-update() {
         (
           set -e
@@ -568,8 +457,9 @@
   # propósito, mismo criterio que TeXstudio más abajo: lazy.nvim reescribe
   # lazy-lock.json en cada actualización de plugin. ~/.config/nvim/lua/
   # plugins/base16.lua + lua/matugen.lua sincronizan el colorscheme de
-  # Neovim con el tema Gruvbox de Noctalia (programs.noctalia.settings.theme
-  # más arriba).
+  # Neovim con el tema dinámico de DMS (matugen escribe el template
+  # neovim-colors.lua del propio flake de DMS cada vez que cambia el
+  # wallpaper/paleta).
   home.sessionVariables = {
     EDITOR = "nvim";
     VISUAL = "nvim";
@@ -715,7 +605,7 @@
       # declarara -- nunca llegó a terminarse).
     delta # diffs con resaltado (git diff/log/show vía programs.git.delta.enable) -- ver xdg.configFile."delta/config" más arriba
     yubikey-manager
-    (callPackage ../../pkgs/librepods.nix { })
+    librepodsPkg
     (python3Packages.callPackage ../../pkgs/clamui.nix { }) # GUI de ClamAV -- clamav en sí va en configuration.nix (services.clamav), clamui solo invoca `clamscan` por $PATH
     herdr # multiplexor de agentes (Claude Code, etc.) para la terminal --
       # NO reemplaza a kitty (que sigue siendo la terminal, ver
@@ -730,59 +620,12 @@
       # (no hay `programs.weechat`, se confirmó buscando en el source real del
       # input), así que la config de plugins/scripts queda a mano dentro de
       # weechat (`/script install ...`), no versionada en este repo.
-    btop # monitor de recursos en terminal -- Noctalia ya trae un template de
-      # color built-in para btop (theme.templates, ver comentario más arriba),
-      # pero el paquete en sí no estaba instalado; sin él, ese template no
-      # tenía nada a qué aplicarse.
+    btop # monitor de recursos en terminal. DMS no trae template propio para
+      # btop (a diferencia de Noctalia, que sí lo tenía) -- queda sin tema
+      # Gruvbox automático, igual que yazi (ver modules/desktop.nix).
     obsidian # notas locales en Markdown -- paquete directo de nixpkgs, sin
       # módulo declarativo propio (guarda su config/vaults dentro de cada
       # vault, no hay nada que declarar acá).
-    # IntelliJ IDEA Ultimate -- paquete directo de nixpkgs, no Toolbox:
-    # Toolbox baja binarios fuera del store y se autoactualiza por su
-    # cuenta, no encaja con el modelo declarativo de este repo (mismo
-    # motivo por el que LibrePods se compila de fuente en vez de usar un
-    # AppImage, ver pkgs/librepods.nix). Requiere licencia/login JetBrains
-    # la primera vez que se abre. allowUnfree ya está en true a nivel
-    # sistema (hosts/ale/configuration.nix, por Nvidia/Steam) y
-    # useGlobalPkgs = true lo hereda acá, así que no hace falta nada extra.
-    #
-    # Wrapper sobre bin/idea para arreglar el preview de Markdown (y
-    # cualquier otra vista basada en JCEF -- el navegador embebido de las
-    # IDEs JetBrains, Chromium Embedded Framework). Diagnosticado en vivo
-    # (2026-07-27): el preview se queda en blanco porque
-    # jcef_helper/libcef.so (adentro de idea/plugins/jcef-plugin/jcef/)
-    # fallan con "error while loading shared libraries" contra ~19 libs
-    # (nspr/nss, dbus, at-spi2 (atk), cups, la pila de X11, mesa/gbm,
-    # expat, xkbcommon, cairo, pango) -- confirmado corriendo
-    # `ldd .../jcef_helper` a mano contra el store real. Es un gap real de
-    # nixpkgs, no de esta config: pkgs/applications/editors/jetbrains/
-    # ides/idea.nix solo agrega `zlib` a extraLdPath, e incluso el propio
-    # readme.md de nixpkgs para paquetes jetbrains tiene un TODO sin
-    # resolver sobre JCEF ("use chromium stuff built by nixpkgs for
-    # jcef?"). No se puede simplemente re-wrappear bin/idea con
-    # overrideAttrs porque colisiona con el nombre que makeWrapper ya usa
-    # internamente (.idea-wrapped, creado por el wrapProgram original) --
-    # symlinkJoin + un wrapper nuevo evita eso del todo, sin tocar los
-    # archivos internos del paquete original. share/applications/*.desktop
-    # y los íconos quedan igual (symlinkeados desde el paquete real), y
-    # como el .desktop usa `Exec=idea` (comando pelado, no ruta absoluta),
-    # el launcher de Noctalia agarra este wrapper solo por estar antes en
-    # $PATH -- sin tocar nada del .desktop.
-    (pkgs.symlinkJoin {
-      name = "idea-jcef-fix";
-      paths = [ pkgs.jetbrains.idea ];
-      nativeBuildInputs = [ pkgs.makeWrapper ];
-      postBuild = ''
-        rm "$out/bin/idea"
-        makeWrapper "${pkgs.jetbrains.idea}/bin/idea" "$out/bin/idea" \
-          --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath (with pkgs; [
-            nspr nss dbus at-spi2-core cups alsa-lib
-            libx11 libxcomposite libxdamage libxext libxfixes libxrandr libxcb
-            libgbm expat libxkbcommon cairo pango
-          ])}"
-      '';
-      meta = pkgs.jetbrains.idea.meta // { mainProgram = "idea"; };
-    })
     libreoffice-fresh # suite completa (Writer/Calc/Impress/Draw/Base/Math) --
       # "fresh" (26.2.x, última rama) en vez de "still" (25.8.x, LTS): sin
       # motivo para preferir la rama LTS acá.
@@ -796,28 +639,28 @@
       # LibreOffice hereda el locale del sistema (i18n.defaultLocale en
       # hosts/ale/configuration.nix), así que no hay que tocar nada dentro
       # de la UI tampoco.
-    # dependencia del plugin oficial "screen_recorder" de Noctalia
-    # (noctalia-dev/official-plugins) -- el plugin solo hace de wrapper/IPC,
+    # dependencia del plugin "Screen Capture Toolbar" de DMS (plugin de
+    # terceros, ~/.config/DankMaterialShell/plugins/screenCaptureToolbar,
+    # bind en Print vía niri.kdl) -- el plugin solo hace de wrapper/IPC,
     # busca este binario en PATH. El derivation de nixpkgs ya wrappea
     # LD_LIBRARY_PATH con /run/opengl-driver/lib, que trae las libs NVENC
     # de Nvidia gracias a hardware.graphics.enable + hardware.nvidia.* de
-    # modules/graphics.nix. El portal (xdg-desktop-portal-hyprland) ya lo
-    # activa programs.hyprland.enable solo. El plugin en sí NO se declara
-    # acá -- Noctalia v5 lo baja y activa en runtime (ver instrucción abajo).
+    # modules/graphics.nix.
     #
     # SÍ hace falta un override puntual acá: environment.sessionVariables.
     # LIBVA_DRIVER_NAME = "nvidia" (modules/graphics.nix) fuerza VAAPI a
-    # cargar el driver de Nvidia sin importar qué dispositivo se abra.
-    # video_source=focused (ver programs.noctalia.settings.plugin_settings
-    # más arriba) hace que gpu-screen-recorder capture vía KMS en el nodo
-    # que de verdad maneja la pantalla interna en modo PRIME sync --
-    # /dev/dri/renderD128, la iGPU Intel -- y ahí esa variable forzada rompe
-    # vaInitialize (confirmado en vivo: "vaInitialize failed" /
+    # cargar el driver de Nvidia sin importar qué dispositivo se abra. Para
+    # una sola pantalla, CaptureToolbar.qml invoca
+    # `gpu-screen-recorder -w "$MONITOR"` (el nombre de salida real vía
+    # `niri msg -j focused-output`) en vez de `-w portal` -- captura directo
+    # por KMS en el nodo que de verdad maneja la pantalla interna en modo
+    # PRIME sync -- /dev/dri/renderD128, la iGPU Intel -- y ahí esa variable
+    # forzada rompe vaInitialize (mismo síntoma "vaInitialize failed" /
     # "failed to query supported video codecs for device
-    # /dev/dri/renderD128" en el log de Noctalia). El wrapper solo
-    # desactiva esa variable para este binario puntual -- no toca el env
-    # global, así que el resto de las apps (navegador, mpv) siguen usando
-    # VAAPI de Nvidia como se pretendía.
+    # /dev/dri/renderD128" que ya se había diagnosticado con Noctalia). El
+    # wrapper solo desactiva esa variable para este binario puntual -- no
+    # toca el env global, así que el resto de las apps (navegador, mpv)
+    # siguen usando VAAPI de Nvidia como se pretendía.
     (pkgs.gpu-screen-recorder.overrideAttrs (old: {
       nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.makeWrapper ];
       postFixup = (old.postFixup or "") + ''
@@ -829,11 +672,11 @@
     # TeX Live completa). Va en home.packages (no environment.systemPackages)
     # porque es una herramienta de usuario, no del sistema. useUserPackages =
     # true (ver flake.nix) publica esto en /etc/profiles/per-user/ale/bin,
-    # que NixOS agrega al PATH de toda la sesión gráfica (greetd/Hyprland vía
-    # PAM), no solo a shells interactivas -- así que cualquier editor
-    # lanzado desde el launcher de Noctalia lo hereda sin configuración
-    # extra. Probado en un principio con TeXiFy-IDEA (IntelliJ IDEA), pero
-    # se abandonó esa ruta (ver NOTES.md) a favor de TeXstudio, más abajo.
+    # que NixOS agrega al PATH de toda la sesión gráfica (greetd vía PAM), no
+    # solo a shells interactivas -- así que cualquier editor lanzado desde el
+    # launcher de DMS lo hereda sin configuración extra. Probado en un
+    # principio con TeXiFy-IDEA (IntelliJ IDEA), pero se abandonó esa ruta
+    # (ver NOTES.md) a favor de TeXstudio, más abajo.
     tectonic
     ghostscript # da el binario `gs` -- junto con tectonic de arriba, es el
       # pipeline LaTeX->PNG que usa `slides` (ver modules/desktop.nix) para
@@ -864,4 +707,37 @@
       # `zeditor`, no `zed`; el .desktop instalado sí queda como "Zed" en el
       # launcher)
   ];
+
+  # --- LibrePods: autostart en segundo plano ---
+  # Servicio systemd de usuario en vez de un spawn-at-startup en niri.kdl --
+  # mismo motivo que DankMaterialShell/DankCalendar/VoxType más arriba: un
+  # spawn-at-startup no se relanza solo si el proceso muere, Restart=on-failure
+  # sí. --start-minimized (confirmado con `librepods --help`) arranca
+  # directo al tray sin abrir ventana; el tray queda activo (sin --no-tray)
+  # para poder abrir la UI de ruido/batería desde ahí cuando haga falta.
+  systemd.user.services.librepods = {
+    Unit = {
+      Description = "LibrePods (control de AirPods) en segundo plano";
+      After = [ "graphical-session-pre.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      # XLOCALEDIR explícito acá (no solo el environment.sessionVariables
+      # global de modules/desktop.nix) -- diagnosticado en vivo (2026-08-10):
+      # LibrePods usa winit, que llama a xkb_compose_table_new_from_locale()
+      # al recibir la capability de teclado del seat de Wayland y explota
+      # (panic/SIGABRT) si XLOCALEDIR no está seteada. El valor global SÍ
+      # llega a `systemctl --user show-environment` unos segundos después
+      # del login (niri-session corre dbus-update-activation-environment
+      # recién al arrancar niri), pero este servicio arranca por
+      # graphical-session.target, en la misma ventana -- carrera real: en un
+      # boot llegó a agotar los 5 reintentos por defecto de systemd
+      # (start-limit-hit, sin más auto-recovery) antes de que la variable
+      # se propagara. Declararla acá evita depender de ese timing del todo.
+      Environment = "XLOCALEDIR=${pkgs.libx11}/share/X11/locale";
+      ExecStart = "${librepodsPkg}/bin/librepods --start-minimized";
+      Restart = "on-failure";
+    };
+    Install.WantedBy = [ "graphical-session.target" ];
+  };
 }
