@@ -431,6 +431,15 @@ in
     enableGitIntegration = true;
   };
 
+  # --- direnv: activa devShells de flakes por carpeta (ej. lab-tiktoks) ---
+  # nix-direnv (no el direnv básico) cachea el devShell evaluado en el store,
+  # así un simple `cd` no reevalúa el flake entero cada vez.
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+    enableZshIntegration = true;
+  };
+
   # --- Neovim + LazyVim ---
   # home.packages, NO programs.neovim: ese módulo SIEMPRE gestiona
   # ~/.config/nvim/init.lua como symlink al store (aunque no declares
