@@ -192,6 +192,14 @@ binds {
     // hyprland.lua) en vez del Mod+P="notepad" que trae DMS por default.
     Mod+P { spawn "dms" "ipc" "clipboard" "toggle"; }
 
+    // Reinicio manual de DMS -- `systemctl --user restart dms.service` y NO
+    // `dms restart`: ver el comentario largo más arriba (línea ~94) y en
+    // modules/niri.nix sobre el incidente en vivo donde `dms restart` mató
+    // el proceso sin que Restart=on-failure lo relanzara (el restart manual
+    // sale del control de systemd, así que el unit no lo ve como crash).
+    // Reiniciar vía systemctl sí queda bajo su supervisión normal.
+    Mod+Shift+E { spawn "systemctl" "--user" "restart" "dms.service"; }
+
     // --- Foco direccional ---
     // Asimétrico a propósito (idioma nativo de niri, no un capricho): en
     // columnas, izquierda/derecha mueve el foco ENTRE columnas y
