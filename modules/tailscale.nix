@@ -27,37 +27,35 @@
   #   sudo tailscale up
   # (se abre el flujo de login en el navegador; una sola vez).
 
-  # --- Exit node de Mullvad en cada arranque -- DESACTIVADO (2026-08-10, a pedido explícito) ---
-  # Esto solo saca el servicio systemd que REAPLICABA `--exit-node=mullvad-exit`
-  # en cada boot (por la carrera con el netmap, ver el comentario histórico
-  # abajo) -- el exit node en sí queda persistido en el estado de tailscaled
-  # (fuera de este archivo) y sigue activo hasta que se saque a mano con:
+  # --- Exit node de Mullvad en cada arranque ---
+  # Fija `--exit-node=mullvad-exit` en cada boot -- el exit node en sí queda
+  # persistido en el estado de tailscaled (fuera de este archivo) y sigue
+  # activo hasta que se saque a mano con:
   #   sudo tailscale set --exit-node=
-  # Descomentar este bloque para volver a fijarlo declarativamente.
-  # systemd.services.tailscale-exit-node = {
-  #   description = "Fijar exit node de Mullvad en Tailscale";
-  #   after = [ "tailscaled.service" "network-online.target" ];
-  #   wants = [ "tailscaled.service" "network-online.target" ];
-  #   wantedBy = [ "multi-user.target" ];
-  #   serviceConfig = {
-  #     Type = "oneshot";
-  #     RemainAfterExit = true;
-  #     ExecStart = pkgs.writeShellScript "tailscale-exit-node" ''
-  #       set -u
-  #       for i in $(seq 1 10); do
-  #         if ${pkgs.tailscale}/bin/tailscale set --exit-node=mullvad-exit --exit-node-allow-lan-access=true; then
-  #           exit 0
-  #         fi
-  #         sleep 2
-  #       done
-  #       exit 1
-  #     '';
-  #     Restart = "on-failure";
-  #     RestartSec = "10s";
-  #   };
-  # };
-  #
-  # Historial: BUG real, corregido (previo a esta desactivación): en el 100%
+  systemd.services.tailscale-exit-node = {
+    description = "Fijar exit node de Mullvad en Tailscale";
+    after = [ "tailscaled.service" "network-online.target" ];
+    wants = [ "tailscaled.service" "network-online.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = pkgs.writeShellScript "tailscale-exit-node" ''
+        set -u
+        for i in $(seq 1 10); do
+          if ${pkgs.tailscale}/bin/tailscale set --exit-node=mullvad-exit --exit-node-allow-lan-access=true; then
+            exit 0
+          fi
+          sleep 2
+        done
+        exit 1
+      '';
+      Restart = "on-failure";
+      RestartSec = "10s";
+    };
+  };
+
+  # Historial: BUG real, corregido (previo a una desactivación temporal el 2026-08-10): en el 100%
   # de los arranques este servicio fallaba en el primer intento (`invalid
   # value "mullvad-exit" for --exit-node; must be IP or hostname`, visto en
   # journalctl -p3) porque corría antes de que tailscaled terminara de
@@ -65,6 +63,6 @@
   # resolver el nombre "mullvad-exit" a un peer. El `Restart = "on-failure"`
   # de antes lo disimulaba (10s después reintentaba y ya funcionaba), pero
   # dejaba un "Failed to start" real en el journal en cada boot. El
-  # ExecStart de arriba reintentaba el comando con backoff antes de darle a
-  # systemd un fallo real -- ya no corre, pero se deja documentado.
+  # ExecStart de arriba reintenta el comando con backoff antes de darle a
+  # systemd un fallo real.
 }
