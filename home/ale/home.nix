@@ -63,6 +63,42 @@ in
   # ya exportan, más el bloque `cursor {}` de niri.kdl como refuerzo.
   gtk.enable = true;
 
+  # adw-gtk3: motor de tema GTK3 real (no solo un import de colores) --
+  # necesario para que apps GTK3 "legacy" (no libadwaita) como LibreOffice
+  # tomen el tema dinámico. dank-colors.css (el que DMS/matugen escribe en
+  # gtk-3.0/) solo define nombres de color estilo libadwaita
+  # (window_bg_color, accent_bg_color, etc.), que son los que leen apps GTK4/
+  # libadwaita (Nautilus, Loupe -- por eso esas sí heredan el tema solo). Sin
+  # gtk-theme-name seteado, GTK3 cae al Adwaita clásico de stock, que usa
+  # nombres viejos (@theme_bg_color, @theme_selected_bg_color...) que
+  # dank-colors.css nunca define -- confirmado en vivo que por eso LibreOffice
+  # (VCL backend gtk3, verificado con /proc/<pid>/maps -> libvclplug_gtk3lo.so)
+  # no tomaba ningún color.
+  #
+  # El propio scripts/gtk.sh del paquete dank-material-shell ya contempla
+  # este caso: busca una copia ESCRIBIBLE de adw-gtk3 en
+  # ~/.local/share/themes/adw-gtk3(-dark) y, si la encuentra, le parchea el
+  # gtk.css/gtk-dark.css real con los colores de matugen en cada cambio de
+  # tema/wallpaper (dms ipc call theme dark/light, o al cambiar de wallpaper).
+  # Solo declaramos acá el paquete + el nombre (gtk-theme-name en
+  # settings.ini) -- los COLORES los sigue poniendo DMS en runtime, sigue
+  # siendo 100% dinámico. gtk.sh busca en rutas fijas (~/.local/share/themes,
+  # ~/.themes, /usr/share/themes) que no incluyen el store de Nix, así que
+  # hace falta además una copia escribible ahí -- paso manual de una sola vez
+  # (mismo criterio que la cuenta de Nextcloud o voxtype setup más abajo, no
+  # versionado en Nix porque gtk.sh necesita escribir sobre esos archivos):
+  #   mkdir -p ~/.local/share/themes
+  #   cp -rL "$(nix eval --raw nixpkgs#adw-gtk3)/share/themes/adw-gtk3" ~/.local/share/themes/
+  #   cp -rL "$(nix eval --raw nixpkgs#adw-gtk3)/share/themes/adw-gtk3-dark" ~/.local/share/themes/
+  #   chmod -R u+w ~/.local/share/themes/adw-gtk3 ~/.local/share/themes/adw-gtk3-dark
+  #   dms ipc call theme dark   # fuerza a DMS a re-generar y parchear con los colores actuales
+  # Después de eso, reiniciar LibreOffice (cierra soffice del todo, cachea el
+  # tema al arrancar).
+  gtk.theme = {
+    name = "adw-gtk3-dark";
+    package = pkgs.adw-gtk3;
+  };
+
   home.pointerCursor = {
     enable = true;
     package = pkgs.bibata-cursors;
