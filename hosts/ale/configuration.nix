@@ -22,6 +22,19 @@
   # volver si un rebuild deja el sistema roto.
   boot.loader.systemd-boot.configurationLimit = 2;
   boot.loader.efi.canTouchEfiVariables = true;
+  # El menú de systemd-boot esperaba los 5s por defecto en cada arranque. 1s
+  # sigue alcanzando para colarse a elegir la generación anterior si hace
+  # falta (mantené Espacio/flechas apretado al encender).
+  boot.loader.timeout = lib.mkDefault 1;
+
+  # Arranque silencioso: sin esto la consola escupe mensajes del kernel y de
+  # cada unidad de systemd sobre fondo negro, y al pasar a la sesión se ve un
+  # instante de texto de niri arriba a la izquierda antes de que pinte. quiet
+  # + estos log-levels dejan la pantalla limpia hasta que aparece el
+  # compositor (los errores siguen quedando en el journal).
+  boot.kernelParams = [ "quiet" "udev.log_level=3" "rd.udev.log_level=3" "systemd.show_status=auto" ];
+  boot.consoleLogLevel = 3; # NixOS lo traduce a loglevel=3 en la cmdline
+  boot.initrd.verbose = false;
 
   # Sin esto no hay swap en absoluto (hardware-configuration.nix trae
   # swapDevices = [ ]), y systemd-oomd queda "degradado" bajo presión de

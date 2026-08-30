@@ -65,6 +65,12 @@ layout {
 // niri. Cerrar/mover/redimensionar queda por keybind (Mod+Q, Mod+arrastre).
 prefer-no-csd
 
+// niri abre la ventana "Important Hotkeys" en cada arranque de la sesión --
+// skip-at-startup la desactiva (sigue disponible a demanda con Mod+Shift+/).
+hotkey-overlay {
+    skip-at-startup
+}
+
 // Rounding no es una opción de layout en niri -- es una window-rule global
 // (geometry-corner-radius + clip-to-geometry), ver más abajo.
 window-rule {

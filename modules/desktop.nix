@@ -234,9 +234,20 @@ in
   # tras la red -- en cada boot falla "Could not resolve hostname" contra
   # dl.flathub.org y reintenta cada 60s (~20 fallos por boot) hasta que el DNS
   # sube. Ordenarlo tras network-online.target elimina ese ruido.
+  #
+  # Además corre en cada boot verificando Flathub (~75s con el addon nvidia de
+  # Speech Note, que pesa varios GB) justo cuando estás iniciando sesión, y le
+  # roba I/O/CPU al arranque de la sesión (DMS tarda en pintar la barra).
+  # Nice + scheduling idle lo dejan ceder ante todo lo demás sin dejar de
+  # hacer su trabajo en segundo plano.
   systemd.services.flatpak-managed-install = {
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
+    serviceConfig = {
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      CPUSchedulingPolicy = "idle";
+    };
   };
 
   fonts.packages = with pkgs; [
