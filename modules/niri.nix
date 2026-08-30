@@ -61,7 +61,12 @@
           if [ -n "$swaybg_pid" ]; then
             kill "$swaybg_pid" 2>/dev/null || true
           fi
-          ${pkgs.swaybg}/bin/swaybg -o eDP-1 -i "$path" -m fill &
+          # Sin `-o`: swaybg pinta TODAS las salidas conectadas (y las que se
+          # enchufen después) con la misma imagen. Con `-o eDP-1` el monitor
+          # externo por HDMI se quedaba sin fondo -- la superficie propia de
+          # DMS que debería cubrirlo está rota en el escritorio normal (mismo
+          # bug #2299 que motiva este workaround).
+          ${pkgs.swaybg}/bin/swaybg -i "$path" -m fill &
           swaybg_pid=$!
           current="$path"
         fi
@@ -79,6 +84,33 @@
         ${pkgs.inotify-tools}/bin/inotifywait -qq -e moved_to -e close_write \
           --include 'session.json' "$statedir" 2>/dev/null || sleep 2
       done
+    '')
+
+    # --- Presentar con espejo (proyector) ---
+    # niri NO espeja salidas de forma nativa. wl-mirror captura eDP-1 y la
+    # muestra fullscreen en la pantalla externa: presentás con `slides` (u otra
+    # cosa) mirando el portátil y controlando con el teclado, y el público ve
+    # la misma imagen en el proyector. Funciona con el Kitty Graphics Protocol
+    # del fork de slides (captura a nivel compositor, no del stream de la
+    # terminal -- por eso NO sirve tmux acá). Bind Mod+Shift+P en niri.kdl;
+    # volver a pulsarlo corta el espejo.
+    #
+    # El destino se autodetecta (primera salida conectada que NO sea eDP-1),
+    # así funciona con cualquier proyector/monitor sin importar si el conector
+    # es HDMI-A-1, DP-1 (adaptador USB-C), etc.
+    pkgs.wl-mirror
+    (pkgs.writeShellScriptBin "present-mirror" ''
+      if ${pkgs.procps}/bin/pkill -f 'wl-mirror .*--fullscreen-output'; then
+        exit 0
+      fi
+      target=$(${config.programs.niri.package}/bin/niri msg --json outputs \
+        | ${pkgs.jq}/bin/jq -r 'to_entries[] | select(.key != "eDP-1" and .value.current_mode != null) | .key' \
+        | head -n1)
+      if [ -z "$target" ]; then
+        ${pkgs.libnotify}/bin/notify-send "present-mirror" "No hay pantalla externa conectada" || true
+        exit 1
+      fi
+      exec ${pkgs.wl-mirror}/bin/wl-mirror --fullscreen-output "$target" eDP-1
     '')
   ];
 

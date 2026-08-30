@@ -16,6 +16,17 @@ output "eDP-1" {
     scale 1
 }
 
+// Proyector/TV por HDMI. scale 1 (no el 1.25 que niri autodetecta) para que
+// tenga el MISMO tamaño lógico que eDP-1 -- así el espejo de `present-mirror`
+// (wl-mirror, ver modules/niri.nix) sale 1:1 sin reescalar/emborronar.
+// Posición a la derecha; si querés otra distribución, cambialo desde
+// DMS -> Configuración -> Pantallas (escribe dms/outputs.kdl, incluido más
+// abajo, que gana sobre esto).
+output "HDMI-A-1" {
+    scale 1
+    position x=1920 y=0
+}
+
 // --- Input ---
 input {
     keyboard {
@@ -168,6 +179,10 @@ binds {
     // un margen chico) y por lo tanto conserva geometry-corner-radius también.
     Mod+M { maximize-column; }
     Mod+V { toggle-window-floating; } // el bind que originó toda esta migración
+
+    // Espejar eDP-1 en el proyector HDMI para presentar (script present-mirror
+    // en modules/niri.nix). Volver a pulsar corta el espejo.
+    Mod+Shift+P { spawn "present-mirror"; }
 
     // --- DMS: launcher / control center / settings / lock ---
     // Verbos IPC confirmados contra danklinux.com/docs/dankmaterialshell/keybinds-ipc
