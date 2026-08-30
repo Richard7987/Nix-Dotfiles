@@ -77,6 +77,13 @@
     options = "--delete-older-than 3d";
   };
 
+  # Deduplica ficheros idénticos del store con hardlinks al escribirlos. En un
+  # store grande (multitud de closures de nixpkgs que solo difieren en unos
+  # pocos paths tras cada `nix flake update`) recupera un 5-20%. Coste: un
+  # hash extra por fichero nuevo al construir, despreciable. Para el store que
+  # ya está acumulado hay que correr `nix store optimise` una vez a mano.
+  nix.settings.auto-optimise-store = true;
+
   # GC de emergencia DURANTE un build: si el espacio libre baja de min-free,
   # Nix recolecta basura hasta llegar a max-free antes de seguir -- evita que
   # `nixos-rebuild` reviente con "No space left on device" a mitad de camino.
