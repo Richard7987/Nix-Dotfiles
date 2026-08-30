@@ -1,5 +1,43 @@
 { config, lib, pkgs, inputs, ... }:
 
+let
+  # DaVinci Resolve es una app X11 y esta sesión usa xwayland-satellite, no
+  # XWayland nativo (ver modules/niri.nix). xwayland-satellite NO le reenvía a
+  # niri la ventana principal de Resolve ("Organizador de proyectos"): el splash
+  # abre, se cierra, y el editor nunca aparece -- el proceso queda vivo sin
+  # ventana girando CPU. Diagnosticado en vivo 2026-08-29: la X-window existe
+  # (Map State IsViewable, sin override-redirect) pero `niri msg windows` no la
+  # lista nunca. Envolver Resolve en gamescope (micro-compositor anidado) le da
+  # una raíz X11 limpia y hacia niri sale como UNA ventana Wayland normal --
+  # confirmado que así abre el Organizador de proyectos sin crash.
+  #
+  # Las tres __*_OFFLOAD/__GLX/__VK son para que, en esta Optimus (Intel UHD 630
+  # + GTX 1050), tanto gamescope como Resolve usen la Nvidia: sin ellas el
+  # GPUDetect de Resolve dentro del compositor anidado no encuentra la GPU y
+  # crashea (SIGABRT en libddm, "mutex lock failed"). Con Xwayland directo
+  # Resolve ya elegía la Nvidia sin ayuda, pero gamescope por default arranca
+  # sobre la Intel.
+  #
+  # El .desktop de Resolve trae Exec=davinci-resolve (sin path absoluto), así
+  # que el lanzador de DMS/fuzzel agarra este wrapper vía PATH. Contra conocida:
+  # la ventana queda con app-id "gamescope", no "resolve" -- rompe el
+  # StartupWMClass del .desktop y cualquier regla de ventana de niri que apunte
+  # a "resolve".
+  davinci-resolve-gamescope = pkgs.symlinkJoin {
+    name = "davinci-resolve-gamescope";
+    paths = [ pkgs.davinci-resolve ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      rm $out/bin/davinci-resolve
+      makeWrapper ${pkgs.gamescope}/bin/gamescope $out/bin/davinci-resolve \
+        --set __NV_PRIME_RENDER_OFFLOAD 1 \
+        --set __GLX_VENDOR_LIBRARY_NAME nvidia \
+        --set __VK_LAYER_NV_optimus NVIDIA_only \
+        --add-flags "-w 1920 -h 1080 -f --" \
+        --add-flags "${pkgs.davinci-resolve}/bin/davinci-resolve"
+    '';
+  };
+in
 {
   # pkexec necesita el wrapper setuid de NixOS para funcionar (el binario
   # crudo del store no tiene setuid). Sin esto, el propio módulo de gamemode
@@ -165,6 +203,42 @@
     configHome = "/home/ale";
   };
 
+  # --- Flatpak (Flathub), gestionado declarativamente por nix-flatpak ---
+  # Único uso actual: Speech Note (mkiol/dsnote) -- Speech-to-Text/Text-to-
+  # Speech/traducción offline, no está en nixpkgs (confirmado buscando: solo
+  # se distribuye oficialmente como Flatpak/AppImage/Snap upstream) y su
+  # build desde fuente depende de whisper.cpp/piper/vosk, demasiado frágil
+  # para empaquetar a mano acá. El remoto "flathub" lo agrega nix-flatpak
+  # solo por default -- no hace falta declararlo.
+  #
+  # El addon ".Addon.nvidia" trae la aceleración por GPU (CUDA) de los
+  # modelos de Whisper/Piper -- el propio Flathub advierte que pesa bastante
+  # (varios GB, ver flathub.org/apps/net.mkiol.SpeechNote.Addon.nvidia). La
+  # GPU real de esta laptop (GTX 1050, ver modules/graphics.nix) usa el
+  # driver propietario "legacy_580" -- flatpak resuelve el runtime
+  # org.freedesktop.Platform.GL.nvidia-<versión> automático matcheando la
+  # versión del driver del host, así que debería tomarlo solo. Si el addon
+  # no detecta la GPU (versión de runtime GL sin publicar todavía para
+  # 580.x), Speech Note sigue andando por CPU sin romperse -- es un
+  # fallback, no un hard requirement.
+  services.flatpak = {
+    enable = true;
+    packages = [
+      "net.mkiol.SpeechNote"
+      "net.mkiol.SpeechNote.Addon.nvidia"
+    ];
+    update.onActivation = true; # mantiene los paquetes declarados al día en cada rebuild
+  };
+
+  # nix-flatpak ordena flatpak-managed-install solo tras multi-user.target, no
+  # tras la red -- en cada boot falla "Could not resolve hostname" contra
+  # dl.flathub.org y reintenta cada 60s (~20 fallos por boot) hasta que el DNS
+  # sube. Ordenarlo tras network-online.target elimina ese ruido.
+  systemd.services.flatpak-managed-install = {
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+  };
+
   fonts.packages = with pkgs; [
     nerd-fonts.jetbrains-mono
     noto-fonts
@@ -245,6 +319,34 @@
            # setup GTK4 en vez de alternativas nativas de Wayland (swayimg/
            # imv), que no traen esa integración automática de tema y
            # requerirían configurarla a mano.
+
+    gamescope  # micro-compositor -- lo usa el wrapper davinci-resolve-gamescope
+               # (ver `let` arriba); también sirve suelto para debug
+    davinci-resolve-gamescope  # editor de video, reemplaza a kdenlive (removido
+      # a pedido explícito). Es pkgs.davinci-resolve envuelto en gamescope (ver
+      # el bloque `let` al principio del módulo para el porqué).
+      # Paquete de nixpkgs (pkgs/by-name/da/davinci-resolve):
+      # es un FOD (fixed-output derivation) que descarga el instalador oficial
+      # Linux directo de blackmagicdesign.com durante el build/switch (sin
+      # cuenta/login -- la API pública de descargas alcanza), así que el
+      # primer `nixos-rebuild switch` con esta línea necesita red y baja unos
+      # cuantos GB. Corre en un buildFHSEnv (bubblewrap), no un paquete nativo.
+      #
+      # GPU: no hace falta tocar modules/graphics.nix. OpenCL (lo que Resolve
+      # usa para GPU compute en Linux, junto con CUDA) ya sale solo -- el
+      # módulo hardware.nvidia de NixOS mete `nvidia_x11.out` en
+      # hardware.graphics.extraPackages automáticamente, y ese output ya trae
+      # el ICD de OpenCL (etc/OpenCL/vendors/nvidia.icd, confirmado en
+      # builder.sh real de nixpkgs) visible bajo /run/opengl-driver, que es
+      # justo donde el loader de ocl-icd (ya en el FHS env del paquete) busca
+      # por default. CUDA tampoco necesita cudaPackages.cudatoolkit (que sigue
+      # comentado en graphics.nix): addDriverRunpath en postFixup del paquete
+      # ya engancha contra libcuda.so del propio driver propietario instalado
+      # (legacy_580), el toolkit completo no hace falta solo para correr.
+      # Verificar con `clinfo` (agregar temporalmente si hace falta) que
+      # aparece la GTX 1050 como plataforma OpenCL antes de asumir que Resolve
+      # ya la está usando -- confirmar también dentro de Resolve en
+      # Preferences → Memory and GPU → GPU Configuration.
   ];
 
   # Necesario para que QT_QPA_PLATFORMTHEME=kde (de abajo) resuelva al plugin

@@ -73,6 +73,16 @@
       url = "github:Richard7987/slide";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Instala flatpaks (Flathub) de forma declarativa vía
+    # services.flatpak.packages -- necesario para Speech Note (mkiol/dsnote),
+    # que solo se distribuye oficialmente como Flatpak (no está en nixpkgs,
+    # confirmado buscando). Pineado al último tag publicado (v0.7.0) en vez
+    # de la rama main -- mismo criterio que dank-material-shell arriba. No
+    # tiene input propio de nixpkgs (es un módulo puro, sin paquetes
+    # compilados desde nixpkgs -- confirmado en su flake.nix real), así que
+    # no hace falta `inputs.nixpkgs.follows`.
+    nix-flatpak.url = "github:gmodena/nix-flatpak/v0.7.0";
   };
 
   outputs =
@@ -86,6 +96,7 @@
     , psysonic
     , nezzontli-ctl
     , slides
+    , nix-flatpak
     , ...
     }@inputs:
     let
@@ -98,6 +109,7 @@
         modules = [
           ./hosts/ale/configuration.nix
           dank-material-shell.nixosModules.default
+          nix-flatpak.nixosModules.nix-flatpak
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
