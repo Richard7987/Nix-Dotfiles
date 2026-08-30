@@ -10,7 +10,7 @@
 #
 # appimageTools.wrapType2 arma el FHS env (libs de Electron/Chromium) y
 # extrae el binario real -- confirmado en vivo contra el contenido
-# desempaquetado del AppImage (appimageTools.extractType2):
+# desempaquetado del AppImage (appimageTools.extract):
 #   - Exec real del .desktop upstream: "AppRun --no-sandbox %U" (AppRun solo
 #     exportaba LD_LIBRARY_PATH/XDG_DATA_DIRS y ejecutaba el binario `xmcl`)
 #   - Icono: xmcl.png en usr/share/icons/hicolor/512x512/apps/
@@ -38,7 +38,7 @@ let
     hash = "sha256-t1+JT9OEJSLPnoEfCLo7b7ai9aLYdAaz8gxdqLfTIUw=";
   };
 
-  appimageContents = appimageTools.extractType2 { inherit pname version src; };
+  appimageContents = appimageTools.extract { inherit pname version src; };
 in
 appimageTools.wrapType2 {
   inherit pname version src;

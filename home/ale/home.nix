@@ -294,6 +294,14 @@ in
     oh-my-zsh = {
       enable = true;
       plugins = [ "git" "sudo" ];
+      # compinit -u en vez de -i: se salta compfix.zsh + compaudit (~140ms por
+      # arranque). En esta máquina de un solo usuario todos los dirs de
+      # completions son paths del store (root), así que la auditoría de
+      # permisos no aporta nada -- y en NixOS a veces marca el propio store
+      # como "inseguro" y saca un warning al abrir la terminal.
+      extraConfig = ''
+        ZSH_DISABLE_COMPFIX=true
+      '';
     };
     # fzf-tab -- menú interactivo con fuzzy-search en el Tab (en vez de la
     # lista plana de zsh). Va acá (programs.zsh.plugins, no oh-my-zsh.plugins
@@ -338,10 +346,14 @@ in
       # Corre después de oh-my-zsh (mismo bloque de initContent, se concatena
       # con orden por defecto 1000, y el de oh-my-zsh usa mkOrder 800 -- más
       # bajo sale primero) para pisar cualquier prompt que oh-my-zsh hubiera
-      # puesto. gitstatus (paquete separado, da el binario gitstatusd) es
-      # necesario en PATH para el estado de git rápido -- sin él, el plugin
-      # de p10k intentaría bajarlo en runtime, cosa que falla en un sandbox
-      # de Nix sin red.
+      # gitstatusd: el plugin gitstatus de p10k NO mira $PATH -- solo usa
+      # $GITSTATUS_DAEMON o su propio usrbin/ vendorizado, que el paquete
+      # zsh-powerlevel10k de nixpkgs deja vacío. Sin esta variable, en cada
+      # arranque de zsh intenta descargar gitstatusd de GitHub (timeout de
+      # red -> "Restart Zsh to retry gitstatus initialization" + ~1.5s de
+      # demora al abrir la terminal). Apuntarla al binario del paquete
+      # pkgs.gitstatus lo arregla.
+      export GITSTATUS_DAEMON=${pkgs.gitstatus}/bin/gitstatusd
       source ${pkgs.zsh-powerlevel10k}/share/zsh-powerlevel10k/powerlevel10k.zsh-theme
 
       # Config generada por `p10k configure` -- copiada al repo
@@ -420,6 +432,11 @@ in
       # imprimir nada antes de que el instant prompt se muestre -- si igual
       # sale una advertencia de "console output during initialization" (el
       # wizard eligió modo Verbose), es solo informativa, no rompe nada.
+      #
+      # PF_INFO sin "pkgs": contar los paquetes de Nix tarda ~0.95s (el resto
+      # de módulos juntos, ~25ms) y era el grueso de la demora al abrir la
+      # terminal. Sin ese módulo pfetch corre casi instantáneo.
+      export PF_INFO="ascii title os host kernel uptime memory"
       pfetch
 
       # herdr YA NO se auto-lanza al abrir kitty (2026-07-28, a pedido del
@@ -671,9 +688,12 @@ in
     obsidian # notas locales en Markdown -- paquete directo de nixpkgs, sin
       # módulo declarativo propio (guarda su config/vaults dentro de cada
       # vault, no hay nada que declarar acá).
-    libreoffice-fresh # suite completa (Writer/Calc/Impress/Draw/Base/Math) --
-      # "fresh" (26.2.x, última rama) en vez de "still" (25.8.x, LTS): sin
-      # motivo para preferir la rama LTS acá.
+    libreoffice-stable # suite completa (Writer/Calc/Impress/Draw/Base/Math).
+      # Antes `libreoffice-fresh`: upstream unificó el versionado "still"/"fresh"
+      # en uno solo y nixpkgs colapsó ambos atributos en `libreoffice-stable`
+      # (mismo paquete, 26.2.x). Los nombres viejos siguen andando como alias
+      # pero tiran `evaluation warning: LibreOffice upstream has changed the
+      # versioning, please use libreoffice-stable` en cada nixos-rebuild.
     hunspellDicts.es_MX # diccionario ortográfico español de México, para que
       # LibreOffice lo detecte al corregir. No hace falta wiring extra: el
       # wrapper real de libreoffice (pkgs/applications/office/libreoffice/
@@ -763,8 +783,19 @@ in
   systemd.user.services.librepods = {
     Unit = {
       Description = "LibrePods (control de AirPods) en segundo plano";
-      After = [ "graphical-session-pre.target" ];
+      # Antes ordenado tras graphical-session-pre.target: arrancaba antes de
+      # que el shell (DMS/quickshell) reclamara org.kde.StatusNotifierWatcher
+      # en el bus de sesión y LibrePods hace `.unwrap()` sobre ese watcher
+      # (src/main.rs:148) -> panic/SIGABRT en bucle hasta agotar el
+      # start-limit (7 core-dumps por boot). Ordenarlo tras dms.service +
+      # RestartSec da tiempo a que el watcher exista.
+      After = [ "graphical-session.target" "dms.service" ];
+      Wants = [ "dms.service" ];
       PartOf = [ "graphical-session.target" ];
+      # el watcher puede tardar unos segundos tras dms.service; sin esto los
+      # reintentos rápidos agotan el rate-limit por defecto (5/10s).
+      StartLimitIntervalSec = 120;
+      StartLimitBurst = 10;
     };
     Service = {
       # XLOCALEDIR explícito acá (no solo el environment.sessionVariables
@@ -782,6 +813,7 @@ in
       Environment = "XLOCALEDIR=${pkgs.libx11}/share/X11/locale";
       ExecStart = "${librepodsPkg}/bin/librepods --start-minimized";
       Restart = "on-failure";
+      RestartSec = 5;
     };
     Install.WantedBy = [ "graphical-session.target" ];
   };
