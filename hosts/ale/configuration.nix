@@ -18,7 +18,9 @@
   #   boot.loader.grub.device = "/dev/sdX";  # disco completo, no partición
   # y quita las dos líneas de systemd-boot/efi de abajo.
   boot.loader.systemd-boot.enable = true;
-  boot.loader.systemd-boot.configurationLimit = 5;
+  # 2 = generación actual + la anterior en el menú de arranque, para poder
+  # volver si un rebuild deja el sistema roto.
+  boot.loader.systemd-boot.configurationLimit = 2;
   boot.loader.efi.canTouchEfiVariables = true;
 
   # Sin esto no hay swap en absoluto (hardware-configuration.nix trae
@@ -65,15 +67,21 @@
     "psysonic.cachix.org-1:M9cQyQ7tgvUWOQ5Pyt8ozlMoPLtOZir6MfRuTH9/VYA="
   ];
 
-  # Sin esto /nix/store solo crece: no había ningún GC programado, y
-  # boot.loader.systemd-boot.configurationLimit (ver más abajo) solo recorta
-  # el menú de arranque, no el store. Semanal + 14 días de margen para poder
-  # hacer rollback a una generación reciente si un rebuild sale mal.
+  # GC diario, conservando solo lo de los últimos 3 días -- con rebuilds ~1/día
+  # eso deja la generación actual y la anterior (las que muestra
+  # configurationLimit = 2), suficiente para hacer rollback si algo sale mal,
+  # sin dejar que el store se acumule como antes.
   nix.gc = {
     automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 14d";
+    dates = "daily";
+    options = "--delete-older-than 3d";
   };
+
+  # GC de emergencia DURANTE un build: si el espacio libre baja de min-free,
+  # Nix recolecta basura hasta llegar a max-free antes de seguir -- evita que
+  # `nixos-rebuild` reviente con "No space left on device" a mitad de camino.
+  nix.settings.min-free = 3 * 1024 * 1024 * 1024;   #  3 GiB
+  nix.settings.max-free = 15 * 1024 * 1024 * 1024;  # 15 GiB
 
   # nix-ld: provee un linker dinámico genérico (+ libs comunes) para poder
   # correr binarios prebuilt de terceros sin patchear -- sin esto, cualquier
@@ -94,6 +102,8 @@
     ffmpeg # kinocut llama a los binarios ffmpeg/ffprobe por PATH -- mpv (modules/desktop.nix)
            # linkea libav* como librería interna, pero no expone esos binarios sueltos.
     appimage-run # ejecuta el AppImage de idevice_pair (pairing con iPhone para SideStore)
+    wineWow64Packages.stable # Wine 64/32-bit -- para correr el instalador de PASCO Capstone (PEC forense)
+    winetricks # configura dependencias/componentes dentro del prefix de Wine
   ];
 
   # usbmuxd: demonio que expone el iPhone conectado por USB como socket local

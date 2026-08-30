@@ -174,6 +174,22 @@
         "type": "github"
       }
     },
+    "nix-flatpak": {
+      "locked": {
+        "lastModified": 1767983141,
+        "narHash": "sha256-7ZCulYUD9RmJIDULTRkGLSW1faMpDlPKcbWJLYHoXcs=",
+        "owner": "gmodena",
+        "repo": "nix-flatpak",
+        "rev": "440818969ac2cbd77bfe025e884d0aa528991374",
+        "type": "github"
+      },
+      "original": {
+        "owner": "gmodena",
+        "ref": "v0.7.0",
+        "repo": "nix-flatpak",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1787360063,
@@ -217,6 +233,7 @@
         "gruvbox-wallpapers": "gruvbox-wallpapers",
         "home-manager": "home-manager",
         "nezzontli-ctl": "nezzontli-ctl",
+        "nix-flatpak": "nix-flatpak",
         "nixpkgs": "nixpkgs",
         "psysonic": "psysonic",
         "slides": "slides",
@@ -231,11 +248,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785563576,
-        "narHash": "sha256-H6NHD30duMb/sidZmUITR5dZhMopBUtsdRFG9b3CClw=",
+        "lastModified": 1788052089,
+        "narHash": "sha256-i7AUk5p2C4cP7W5BdEXOfVn8pwCtNRR+9efzvRuROII=",
         "owner": "Richard7987",
         "repo": "slide",
-        "rev": "fc21959a0c4481b5f9725702e9e24df6458a7c46",
+        "rev": "d24927d6aacc10158c3a1ce30082852c5e5ea884",
         "type": "github"
       },
       "original": {
