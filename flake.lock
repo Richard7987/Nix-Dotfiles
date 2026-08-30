@@ -213,11 +213,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788095363,
-        "narHash": "sha256-a+DRKhN3Sn7h9WvbEHBQHNCKi9703Djb7zlGqH9iMtE=",
+        "lastModified": 1788121005,
+        "narHash": "sha256-/YYDE6ii+/s3n8Y62Zu0MdBEgEbGViCCOJ1ZW3nNW6w=",
         "owner": "Psychotoxical",
         "repo": "psysonic",
-        "rev": "9d61a019bd8ffcbcb5270a51e5461830351d078c",
+        "rev": "fd4c6b90e6f27445be1dc3f19574374ebbd7d046",
         "type": "github"
       },
       "original": {
