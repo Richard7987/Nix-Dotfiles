@@ -48,7 +48,7 @@
 
   # --- Red ---
   networking.hostName = "ale";
-  # networking.networkmanager.enable ya se activa en modules/desktop.nix (requisito de Noctalia)
+  # networking.networkmanager.enable ya se activa en modules/desktop.nix (lo usa el applet de red de DMS)
 
   # --- Zona horaria / locale ---
   time.timeZone = lib.mkDefault "America/Mexico_City"; # AJUSTAR si no es tu zona

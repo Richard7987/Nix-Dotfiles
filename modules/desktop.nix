@@ -1,43 +1,5 @@
 { config, lib, pkgs, inputs, ... }:
 
-let
-  # DaVinci Resolve es una app X11 y esta sesión usa xwayland-satellite, no
-  # XWayland nativo (ver modules/niri.nix). xwayland-satellite NO le reenvía a
-  # niri la ventana principal de Resolve ("Organizador de proyectos"): el splash
-  # abre, se cierra, y el editor nunca aparece -- el proceso queda vivo sin
-  # ventana girando CPU. Diagnosticado en vivo 2026-08-29: la X-window existe
-  # (Map State IsViewable, sin override-redirect) pero `niri msg windows` no la
-  # lista nunca. Envolver Resolve en gamescope (micro-compositor anidado) le da
-  # una raíz X11 limpia y hacia niri sale como UNA ventana Wayland normal --
-  # confirmado que así abre el Organizador de proyectos sin crash.
-  #
-  # Las tres __*_OFFLOAD/__GLX/__VK son para que, en esta Optimus (Intel UHD 630
-  # + GTX 1050), tanto gamescope como Resolve usen la Nvidia: sin ellas el
-  # GPUDetect de Resolve dentro del compositor anidado no encuentra la GPU y
-  # crashea (SIGABRT en libddm, "mutex lock failed"). Con Xwayland directo
-  # Resolve ya elegía la Nvidia sin ayuda, pero gamescope por default arranca
-  # sobre la Intel.
-  #
-  # El .desktop de Resolve trae Exec=davinci-resolve (sin path absoluto), así
-  # que el lanzador de DMS/fuzzel agarra este wrapper vía PATH. Contra conocida:
-  # la ventana queda con app-id "gamescope", no "resolve" -- rompe el
-  # StartupWMClass del .desktop y cualquier regla de ventana de niri que apunte
-  # a "resolve".
-  davinci-resolve-gamescope = pkgs.symlinkJoin {
-    name = "davinci-resolve-gamescope";
-    paths = [ pkgs.davinci-resolve ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    postBuild = ''
-      rm $out/bin/davinci-resolve
-      makeWrapper ${pkgs.gamescope}/bin/gamescope $out/bin/davinci-resolve \
-        --set __NV_PRIME_RENDER_OFFLOAD 1 \
-        --set __GLX_VENDOR_LIBRARY_NAME nvidia \
-        --set __VK_LAYER_NV_optimus NVIDIA_only \
-        --add-flags "-w 1920 -h 1080 -f --" \
-        --add-flags "${pkgs.davinci-resolve}/bin/davinci-resolve"
-    '';
-  };
-in
 {
   # pkexec necesita el wrapper setuid de NixOS para funcionar (el binario
   # crudo del store no tiene setuid). Sin esto, el propio módulo de gamemode
@@ -296,19 +258,6 @@ in
       # renderizar fórmulas, y julia-bin para el Ctrl+E de bloques
       # ```julia; los tres están en home.nix (paquetes de usuario, no del
       # sistema), o vía el devShell del propio repo.
-    got  # VCS de este mismo repo (/nixdots ya es un work tree de got, sin
-         # .git -- ver "Migración a got puro" en NOTES.md, 2026-07-22).
-         # Reusa ssh-agent para clone/fetch/send por ssh://, igual que git.
-         # "got commit" NO soporta firma GPG ni SSH (solo "got tag -S" firma,
-         # y solo con SSH) -- los commits de este repo quedan sin firmar
-         # desde la migración. El autor de los commits está declarado en
-         # got.conf del repo bare (~/nixdots.git/got.conf), NO se resuelve
-         # de programs.git/~/.gitconfig -- got solo lee el ~/.gitconfig
-         # clásico como último recurso, y este sistema usa el config de git
-         # en formato XDG (~/.config/git/config, ver home.nix), que got no
-         # mira. programs.git sigue instalado a nivel de sistema solo por
-         # otros repos ajenos a /nixdots.
-
     mpv  # reproductor de video/audio. Verificado con `nix eval`/`nix build`
          # contra el nixpkgs real (no de memoria) que el `pkgs.mpv` de acá ya
          # trae todo lo necesario para "cualquier tipo de video" sin agregar
@@ -331,33 +280,6 @@ in
            # imv), que no traen esa integración automática de tema y
            # requerirían configurarla a mano.
 
-    gamescope  # micro-compositor -- lo usa el wrapper davinci-resolve-gamescope
-               # (ver `let` arriba); también sirve suelto para debug
-    davinci-resolve-gamescope  # editor de video, reemplaza a kdenlive (removido
-      # a pedido explícito). Es pkgs.davinci-resolve envuelto en gamescope (ver
-      # el bloque `let` al principio del módulo para el porqué).
-      # Paquete de nixpkgs (pkgs/by-name/da/davinci-resolve):
-      # es un FOD (fixed-output derivation) que descarga el instalador oficial
-      # Linux directo de blackmagicdesign.com durante el build/switch (sin
-      # cuenta/login -- la API pública de descargas alcanza), así que el
-      # primer `nixos-rebuild switch` con esta línea necesita red y baja unos
-      # cuantos GB. Corre en un buildFHSEnv (bubblewrap), no un paquete nativo.
-      #
-      # GPU: no hace falta tocar modules/graphics.nix. OpenCL (lo que Resolve
-      # usa para GPU compute en Linux, junto con CUDA) ya sale solo -- el
-      # módulo hardware.nvidia de NixOS mete `nvidia_x11.out` en
-      # hardware.graphics.extraPackages automáticamente, y ese output ya trae
-      # el ICD de OpenCL (etc/OpenCL/vendors/nvidia.icd, confirmado en
-      # builder.sh real de nixpkgs) visible bajo /run/opengl-driver, que es
-      # justo donde el loader de ocl-icd (ya en el FHS env del paquete) busca
-      # por default. CUDA tampoco necesita cudaPackages.cudatoolkit (que sigue
-      # comentado en graphics.nix): addDriverRunpath en postFixup del paquete
-      # ya engancha contra libcuda.so del propio driver propietario instalado
-      # (legacy_580), el toolkit completo no hace falta solo para correr.
-      # Verificar con `clinfo` (agregar temporalmente si hace falta) que
-      # aparece la GTX 1050 como plataforma OpenCL antes de asumir que Resolve
-      # ya la está usando -- confirmar también dentro de Resolve en
-      # Preferences → Memory and GPU → GPU Configuration.
   ];
 
   # Necesario para que QT_QPA_PLATFORMTHEME=kde (de abajo) resuelva al plugin

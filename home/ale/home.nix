@@ -245,12 +245,10 @@ in
   };
 
   # --- delta: diffs con resaltado de sintaxis ---
-  # Repos migrados de got a git (2026-07-28, ver NOTES.md) -- a diferencia de
-  # got, git SÍ invoca un pager propio (core.pager), así que
-  # programs.git.delta.enable = true (más abajo, junto a programs.git) alcanza
-  # para que `git diff`/`git log -p`/`git show` salgan coloreados solos, sin
-  # necesitar las funciones manuales gotd/gotl de antes (sacadas). El alias
-  # `gd` del plugin "git" de oh-my-zsh (`git diff`) ya hereda esto gratis.
+  # git invoca su propio pager (core.pager) -- programs.delta.enable = true
+  # (más abajo, junto a programs.git) alcanza para que `git diff`/`git log
+  # -p`/`git show` salgan coloreados solos. El alias `gd` del plugin "git" de
+  # oh-my-zsh (`git diff`) ya hereda esto gratis.
   # paquete delta declarado más abajo, junto al resto de home.packages (dos
   # asignaciones de home.packages en el mismo archivo chocan -- Nix tira
   # "attribute already defined", no las mergea solas como sí hace el sistema
@@ -381,11 +379,9 @@ in
       # 2026-07-22) porque no hay NIX_PATH nixos-config. El subshell con
       # `set -e` corta en el primer error (ej. build roto) sin aplicar
       # switch ni tocar el cwd de la terminal interactiva.
-      # /nixdots volvió a ser un repo git normal (2026-07-28, ver NOTES.md --
-      # antes fue work tree de got, migración documentada como "Migración a
-      # got puro" en NOTES.md 2026-07-22). programs.git.signing.signByDefault
-      # ya está en true (más arriba), así que este commit de flake.lock queda
-      # firmado con la YubiKey solo, sin nada especial acá.
+      # programs.git.signing.signByDefault ya está en true (más arriba), así
+      # que este commit de flake.lock queda firmado con la YubiKey solo, sin
+      # nada especial acá.
       #
       # Sin argumentos actualiza TODOS los inputs a la vez (comportamiento
       # de siempre). Pasándole nombres de inputs (ej. `nixos-update nixpkgs`)
@@ -472,9 +468,9 @@ in
     };
   };
 
-  # git (a diferencia de got) invoca su propio pager -- programs.delta acá
-  # (NO programs.git.delta, renombrado -- confirmado con build real: "has
-  # been renamed to `programs.delta.enable'") alcanza para que
+  # git invoca su propio pager -- programs.delta acá (NO programs.git.delta,
+  # renombrado -- confirmado con build real: "has been renamed to
+  # `programs.delta.enable'") alcanza para que
   # `git diff`/`git log -p`/`git show` (y el alias `gd` de oh-my-zsh) salgan
   # coloreados con delta solos, sin funciones manuales. enableGitIntegration
   # explícito: el auto-enable basado en programs.git.enable quedó deprecado.

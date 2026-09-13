@@ -128,16 +128,12 @@
     # (assets/systemd/dms.service de DMS) trae `Restart = "on-failure"`, que es
     # justo lo que faltó cuando se probó en vivo (2026-08-08): un `dms restart`
     # mató el proceso y NADA lo relanzó -- pantalla sin barra/dock/wallpaper
-    # hasta que se relanzó a mano. Confirmado seguro en ESTE equipo pese a que
-    # Hyprland sigue instalado: el unit es wantedBy=graphical-session.target, y
-    # ese target NUNCA se activa bajo Hyprland acá (por eso Noctalia necesitaba
-    # el loop de shell, ver NOTES.md) -- así que no hay riesgo de que arranquen
-    # dos instancias peleando por el bus, la advertencia de upstream sobre
-    # combinar systemd+spawn no aplica a este caso. Bajo niri SÍ se activa
-    # (niri-session corre dbus-update-activation-environment y arranca
-    # niri.service, que es BindsTo=/Before=graphical-session.target --
+    # hasta que se relanzó a mano. El unit es wantedBy=graphical-session.target,
+    # que niri-session activa solo (corre dbus-update-activation-environment y
+    # arranca niri.service, BindsTo=/Before=graphical-session.target --
     # confirmado contra resources/niri-session y resources/niri.service reales
-    # del proyecto, y en vivo con `systemctl --user is-active graphical-session.target` -> active).
+    # del proyecto, y en vivo con `systemctl --user is-active
+    # graphical-session.target` -> active).
     systemd.enable = true;
 
     lockscreen.securityKey.enable = true;
