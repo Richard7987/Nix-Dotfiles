@@ -46,11 +46,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789138010,
-        "narHash": "sha256-f2moZqMyPxtmii/wWNihZ2Wyo/2krOnGiGuET7PbSqY=",
+        "lastModified": 1789325878,
+        "narHash": "sha256-lpgXRZ3SUtTBBsk3/hqlRtva82aI7dHxzbQsunj7oIY=",
         "owner": "AvengeMedia",
         "repo": "dankcalendar",
-        "rev": "22c0df043d050149cbaa6990cafacfeadfc3f921",
+        "rev": "2f811b14f973521a67af7c71a6a26a9cc42cdada",
         "type": "github"
       },
       "original": {
@@ -120,11 +120,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789267719,
-        "narHash": "sha256-FIlwGdFjtpGYyL8g/RZZvIxshT9gdwJfcMjHRWHrc4U=",
+        "lastModified": 1789352311,
+        "narHash": "sha256-E9hlcRNSRQ1vb+UicOusX/ucroGlBAz/pYhCBorLOn4=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "10d0acd7f81e3c035b452daa39ac7d1673880729",
+        "rev": "cfcda3f99334c8459fa4cd46cce87502e0b48f0a",
         "type": "github"
       },
       "original": {
@@ -213,11 +213,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789244916,
-        "narHash": "sha256-ndZA3jCLjfoeUTEgjLHUMdg7KaBM16UJ5wwuu/S6+zw=",
+        "lastModified": 1789349753,
+        "narHash": "sha256-4xne6zEGJrfqKJXcMXib7Nz3g83wfnlC09ylcgJT8ZU=",
         "owner": "Psychotoxical",
         "repo": "psysonic",
-        "rev": "37d3e3099508badde0aa7b97ea2e3bc4c174a321",
+        "rev": "0b1cb685574f03246998e13888972c37bddda881",
         "type": "github"
       },
       "original": {
