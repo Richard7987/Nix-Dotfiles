@@ -220,7 +220,10 @@
 
   environment.systemPackages = with pkgs; [
     kdePackages.kleopatra
-    inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
+    # zen-browser: instalado vía home-manager (programs.zen-browser en
+    # home.nix), no acá -- ese módulo envuelve el paquete con policies.json
+    # (fix del dropdown oscuro), poner el paquete crudo acá también daría dos
+    # binarios `zen` en PATH, solo uno con el fix.
     kitty          # terminal (Mod+Return en niri.kdl)
     brightnessctl  # atajos de brillo (XF86MonBrightness* en niri.kdl, vía dms ipc brightness)
     nautilus       # gestor de archivos GTK4 -- hereda el theme (matugen) de DMS solo

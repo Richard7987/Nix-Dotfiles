@@ -10,6 +10,7 @@ in
   imports = [
     inputs.dank-material-shell.homeModules.default
     inputs.dankcalendar.homeModules.default
+    inputs.zen-browser.homeModules.default
   ];
 
   home.username = "ale";
@@ -97,6 +98,22 @@ in
   gtk.theme = {
     name = "adw-gtk3-dark";
     package = pkgs.adw-gtk3;
+  };
+
+  # Zen (Firefox-based) renderiza el popup de <select> como widget nativo de
+  # GTK: toma el fondo de tu tema GTK (oscuro) pero el texto lo sigue poniendo
+  # el CSS del sitio (asumiendo fondo claro) -> texto invisible. No tiene
+  # relación con matugen/DMS, es un bug de Firefox en Linux (bugzilla #519763).
+  # policies.Preferences escribe esto en policies.json, sobrevive a
+  # reinstalar/borrar el perfil (a diferencia de ponerlo a mano en
+  # about:config). Status "user" = mismo efecto que about:config, no lo
+  # bloquea para que se pueda cambiar a mano si hace falta.
+  programs.zen-browser = {
+    enable = true;
+    policies.Preferences."widget.content.gtk-theme-override" = {
+      Value = "Adwaita:light";
+      Status = "user";
+    };
   };
 
   home.pointerCursor = {
