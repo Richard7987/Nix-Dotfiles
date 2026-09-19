@@ -1,6 +1,14 @@
 { config, lib, pkgs, inputs, ... }:
 
 {
+  # Reemplaza el módulo de nixpkgs por una copia parcheada -- ver
+  # modules/dms-greeter-fixed.nix para el porqué (bug real de nixpkgs:
+  # asume el layout de dms-shell >=1.6, incompatible con la v1.5.3 pineada
+  # en flake.nix). Quitar ambas líneas si algún día se actualiza dank-
+  # material-shell a una versión con un launcher equivalente a bin/dms-greeter.
+  disabledModules = [ "services/display-managers/dms-greeter.nix" ];
+  imports = [ ./dms-greeter-fixed.nix ];
+
   # pkexec necesita el wrapper setuid de NixOS para funcionar (el binario
   # crudo del store no tiene setuid). Sin esto, el propio módulo de gamemode
   # (modules/graphics.nix) apunta su servicio systemd a
