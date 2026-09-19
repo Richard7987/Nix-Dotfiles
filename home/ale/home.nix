@@ -342,6 +342,11 @@ in
     # README, sin necesitar ningún mkOrder manual).
     syntaxHighlighting.enable = true;
     initContent = lib.mkMerge [
+      ''
+        # Secrets locales (API keys, tokens): archivo fuera de /nixdots para
+        # no versionar ni exponer credenciales en el Nix store.
+        [ -f "$HOME/.config/zsh/secrets.zsh" ] && source "$HOME/.config/zsh/secrets.zsh"
+      ''
       # zsh-autosuggestions -- sourceado a mano (NO con la opción nativa
       # programs.zsh.autosuggestion.enable) porque esa opción fija su propio
       # mkOrder en 700, es decir ANTES del compinit de oh-my-zsh (800) y
@@ -784,6 +789,8 @@ in
     zed-editor # editor -- paquete directo de nixpkgs (el binario se llama
       # `zeditor`, no `zed`; el .desktop instalado sí queda como "Zed" en el
       # launcher)
+    tor-browser # paquete directo de nixpkgs -- sin módulo declarativo
+      # propio como zen-browser (programs.zen-browser)
   ];
 
   # --- LibrePods: autostart en segundo plano ---
