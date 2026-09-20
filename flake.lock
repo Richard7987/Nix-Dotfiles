@@ -120,11 +120,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789765459,
-        "narHash": "sha256-voJJ5IZR4w2149u2Jm/j2zifeWROlpZQ+JzmCQwjgn8=",
+        "lastModified": 1789867870,
+        "narHash": "sha256-sOag/7DTqw4tXLI7UxjrZxPGV+dlTe6zFtJn0VSkgFM=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "17903129f47656fa4d07e78ad87f6592ff4f2527",
+        "rev": "d2a22a3659a6ae99847ea9176114f6957b8ac62e",
         "type": "github"
       },
       "original": {
@@ -213,11 +213,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789856181,
-        "narHash": "sha256-ecT4h4CQLwF8rTj/UAw6ClHBLLgXjcq5iYb9AIjCozY=",
+        "lastModified": 1789863165,
+        "narHash": "sha256-pVj98XRCdf6AEY/TFRVsWY+EKqmO+B0vruBFKPBkjhk=",
         "owner": "Psychotoxical",
         "repo": "psysonic",
-        "rev": "d9a3bb2c9696b226d21a73527b077a504593be67",
+        "rev": "3d63a12db305cc352639ee287137da98e40e16a9",
         "type": "github"
       },
       "original": {
