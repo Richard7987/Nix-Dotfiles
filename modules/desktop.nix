@@ -237,9 +237,6 @@
     nautilus       # gestor de archivos GTK4 -- hereda el theme (matugen) de DMS solo
                    # (escribe gtk-4.0/gtk.css directo, confirmado en core/internal/
                    # matugen/matugen.go), sin necesidad de config aparte
-    yazi           # gestor de archivos TUI. DMS no trae template propio para yazi
-                   # (a diferencia de Noctalia, que sí lo tenía vía community_ids) --
-                   # queda sin tema Gruvbox automático hasta que exista un template.
     kdePackages.breeze              # estilo Qt que renderiza la paleta de KDE
     kdePackages.plasma-integration  # plugin de QPA platform theme (KDEPlasmaPlatformTheme6.so)
                                     # que aplica kdeglobals a cualquier app Qt -- sin esto

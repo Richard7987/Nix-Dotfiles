@@ -28,7 +28,6 @@ home/ale/
 pkgs/
   librepods.nix                  # LibrePods (control AirPods) compilado de fuente
   clamui.nix                     # GUI de ClamAV
-  x-minecraft-launcher.nix
 ```
 
 ## Stack

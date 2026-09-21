@@ -5,6 +5,7 @@ let
   # systemd.user.service de más abajo (autostart en segundo plano) -- un solo
   # callPackage evita declarar la misma derivación dos veces.
   librepodsPkg = pkgs.callPackage ../../pkgs/librepods.nix { };
+
 in
 {
   imports = [
@@ -636,12 +637,6 @@ in
     unzip # usado por varios plugins de nvim al descomprimir descargas (ej. releases de GitHub)
     gcc # fallback nativo de blink.cmp si no baja su binario prebuilt
     gnumake # ídem
-    bubblewrap # bwrap -- requerido por claude-science para su sandbox
-      # (sin esto corre unsandboxed con --dangerously-no-sandbox, full
-      # read/write de $HOME y red sin restricción)
-    socat # requerido también por claude-science: puentea la red del
-      # sandbox de Linux (bwrap aísla la red; socat es el bridge)
-
     # --- LSPs/formatters/linters de los extras de LazyVim (ver lazyvim.json) ---
     # Mason (el instalador default de LazyVim) no funciona en NixOS: no
     # puede correr binarios bajados de internet (store inmutable, sin
@@ -696,13 +691,9 @@ in
     meslo-lgs-nf # Nerd Font que recomienda p10k para sus glifos/iconos
     pfetch # info del sistema al abrir terminal (ver programs.zsh.initContent)
     fzf # binario que fzf-tab invoca para el menú interactivo del Tab (ver programs.zsh.plugins)
-    weechat # cliente IRC de terminal -- sin módulo declarativo en home-manager
-      # (no hay `programs.weechat`, se confirmó buscando en el source real del
-      # input), así que la config de plugins/scripts queda a mano dentro de
-      # weechat (`/script install ...`), no versionada en este repo.
     btop # monitor de recursos en terminal. DMS no trae template propio para
       # btop (a diferencia de Noctalia, que sí lo tenía) -- queda sin tema
-      # Gruvbox automático, igual que yazi (ver modules/desktop.nix).
+      # Gruvbox automático.
     obsidian # notas locales en Markdown -- paquete directo de nixpkgs, sin
       # módulo declarativo propio (guarda su config/vaults dentro de cada
       # vault, no hay nada que declarar acá).
@@ -837,4 +828,5 @@ in
     };
     Install.WantedBy = [ "graphical-session.target" ];
   };
+
 }
